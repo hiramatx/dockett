@@ -13,8 +13,39 @@ public static class JsonFile
         Converters = { new JsonStringEnumConverter() },
     };
 
-    public static string Folder { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Dockett");
+    /// <summary>Name of the marker file that makes Dockett keep its data next to the exe.</summary>
+    public const string PortableMarker = "Dockett.portable";
+
+    public static string Folder { get; } = ChooseFolder(AppContext.BaseDirectory);
+
+    /// <summary>True when settings live beside the exe (portable mode) rather than in %APPDATA%.</summary>
+    public static bool IsPortable { get; } =
+        string.Equals(Folder, Path.Combine(AppContext.BaseDirectory, "Data"), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <c>Data</c> beside the exe when a <see cref="PortableMarker"/> file is there and that folder is writable
+    /// (e.g. on a USB stick); otherwise %APPDATA%\Dockett.
+    /// </summary>
+    public static string ChooseFolder(string exeFolder)
+    {
+        var appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Dockett");
+        if (!File.Exists(Path.Combine(exeFolder, PortableMarker)))
+            return appData;
+
+        var portable = Path.Combine(exeFolder, "Data");
+        try
+        {
+            Directory.CreateDirectory(portable);
+            var probe = Path.Combine(portable, ".write-test");
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+            return portable;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return appData; // read-only location, such as Program Files or a locked-down share
+        }
+    }
 
     /// <summary>Returns null when the file is missing or can't be read; callers then use defaults.</summary>
     public static T? Load<T>(string path) where T : class

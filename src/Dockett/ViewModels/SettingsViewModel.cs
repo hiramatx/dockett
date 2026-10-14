@@ -50,6 +50,10 @@ public partial class SettingsViewModel : ViewModelBase
     public string Version { get; } =
         Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.1.0";
 
+    public string DataLocation { get; } = Services.JsonFile.IsPortable
+        ? "Portable mode: settings are kept in the Data folder next to Dockett.exe."
+        : "Settings are kept in your AppData folder.";
+
     public AppSettings ToModel() => new()
     {
         Theme = Theme,

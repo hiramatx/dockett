@@ -16,6 +16,16 @@ A dual pane file manager for Windows, built with C# and [Avalonia UI](https://av
 - Settings page (gear in the title bar, or Ctrl+,): theme, show hidden and system files, folders before files, confirmations for copy/move and delete, and restoring tabs on startup. Saved in `%APPDATA%\Dockett\settings.json`
 - Light and dark themes follow Windows, or pick one in Settings
 
+## Portable build
+
+To build a portable copy that runs on any 64-bit Windows 10 or 11 PC without installing .NET:
+
+```
+./build/publish-portable.ps1
+```
+
+This creates `artifacts/Dockett-<version>-win-x64-portable.zip` containing a single self-contained `Dockett.exe`. Add `-Runtime win-x64, win-arm64` to also build for Arm PCs. The zip includes a `Dockett.portable` marker file: while it sits next to the exe, settings, tabs, and layout are saved in a `Data` folder beside it, so Dockett can live on a USB stick and leave nothing behind. Delete the marker to use `%APPDATA%\Dockett` instead.
+
 ## Build and run
 
 Requires the .NET 10 SDK on Windows.
