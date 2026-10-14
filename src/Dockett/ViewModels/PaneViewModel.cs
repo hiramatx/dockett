@@ -60,6 +60,7 @@ public partial class PaneViewModel : ViewModelBase
         if (Tabs.Count <= 1) return;
         var index = Tabs.IndexOf(tab);
         Tabs.Remove(tab);
+        tab.Dispose();
         if (SelectedTab == tab || !Tabs.Contains(SelectedTab))
             SelectedTab = Tabs[Math.Min(index, Tabs.Count - 1)];
     }

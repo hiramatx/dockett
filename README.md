@@ -5,6 +5,7 @@ A dual pane file manager for Windows, built with C# and [Avalonia UI](https://av
 - Navigation pane with quick access folders, drives (with usage bars), and network drives
 - Two file panes, each with its own tabs, history, sorting, and filter
 - Address bar with clickable breadcrumbs; click the empty space (or Ctrl+L) to type a path
+- Folders refresh automatically when files change, keeping your selection and scroll position; if a folder is deleted, the tab moves up to the nearest one that still exists
 - Preview panel for images, text and code files, and folder details
 - Tools strip: copy and move to the other pane, rename, new folder, compress to zip, compare folders, properties, delete to Recycle Bin
 - Drag and drop between panes, onto folder rows, and to or from Explorer. Same drive moves, another drive copies; hold Ctrl to copy or Shift to move

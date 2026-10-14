@@ -19,8 +19,12 @@ public partial class FileItem : ObservableObject
     public required string Name { get; init; }
     public required string FullPath { get; init; }
     public bool IsDirectory { get; init; }
-    public long Size { get; init; }
-    public DateTime Modified { get; init; }
+    /// <summary>Updated in place by auto-refresh so rows keep their selection.</summary>
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(SizeText))]
+    public partial long Size { get; set; }
+
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ModifiedText))]
+    public partial DateTime Modified { get; set; }
     public FileKind Kind { get; init; }
 
     /// <summary>Set by "Compare folders" when this item is missing from, or differs from, the other pane.</summary>

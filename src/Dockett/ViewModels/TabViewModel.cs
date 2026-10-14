@@ -15,17 +15,22 @@ public enum SortColumn
 
 public record Crumb(string Name, string Path);
 
-/// <summary>One folder tab: its location, history, listing, filter, and sort.</summary>
-public partial class TabViewModel : ViewModelBase
+/// <summary>One folder tab: its location, history, listing, filter, and sort. Refreshes itself when the folder changes.</summary>
+public partial class TabViewModel : ViewModelBase, IDisposable
 {
     readonly Stack<string> _back = new();
     readonly Stack<string> _forward = new();
+    readonly FolderWatcher _watcher = new();
+    readonly SynchronizationContext? _ui;
     List<FileItem> _all = [];
     int _loadVersion;
     bool _suppressFilterView;
+    bool _disposed;
 
     public TabViewModel(string path)
     {
+        _ui = SynchronizationContext.Current;
+        _watcher.Changed += OnFolderChanged;
         CurrentPath = path;
     }
 
@@ -132,8 +137,42 @@ public partial class TabViewModel : ViewModelBase
             await NavigateAsync(parent.FullName, selectName: Path.GetFileName(trimmed));
     }
 
+    /// <summary>
+    /// Reloads the folder, keeping the current selection unless <paramref name="selectName"/> says what to select.
+    /// If the folder no longer exists, moves to the nearest folder above it that does.
+    /// </summary>
     public Task RefreshAsync(string? selectName = null) =>
-        LoadAsync(CurrentPath, selectName ?? CurrentItem?.Name, addToHistory: false);
+        Directory.Exists(CurrentPath) ? LoadAsync(CurrentPath, selectName, addToHistory: false) : GoToNearestExistingAsync();
+
+    void OnFolderChanged()
+    {
+        if (_ui is null)
+            _ = AutoRefreshAsync();
+        else
+            _ui.Post(_ => _ = AutoRefreshAsync(), null);
+    }
+
+    async Task AutoRefreshAsync()
+    {
+        // Never compete with a navigation in progress; it will show fresh contents anyway.
+        if (_disposed || IsLoading) return;
+        await RefreshAsync();
+    }
+
+    async Task GoToNearestExistingAsync()
+    {
+        for (var dir = Directory.GetParent(Path.TrimEndingDirectorySeparator(CurrentPath)); dir is not null; dir = dir.Parent)
+        {
+            if (dir.Exists && await NavigateAsync(dir.FullName))
+                return;
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _watcher.Dispose();
+    }
 
     [RelayCommand]
     public void ToggleSort(SortColumn column)
@@ -171,6 +210,13 @@ public partial class TabViewModel : ViewModelBase
                 _back.Push(CurrentPath);
                 _forward.Clear();
                 OnHistoryChanged();
+            }
+
+            if (samePlace && _all.Count > 0)
+            {
+                ErrorText = null;
+                MergeRefresh(items, selectName);
+                return true;
             }
 
             _all = items;
@@ -211,6 +257,107 @@ public partial class TabViewModel : ViewModelBase
 
     void ApplyView(string? selectName)
     {
+        Items.Clear();
+        foreach (var item in BuildView())
+            Items.Add(item);
+
+        var select = selectName is null ? null : Items.FirstOrDefault(i => string.Equals(i.Name, selectName, StringComparison.OrdinalIgnoreCase));
+        select ??= Items.FirstOrDefault();
+        SelectedItems = [];
+        CurrentItem = select;
+        UpdateStatus();
+        ItemsReloaded?.Invoke(select);
+    }
+
+    /// <summary>
+    /// Applies a fresh listing of the same folder without rebuilding the list: unchanged rows keep their
+    /// instances (and so their selection and compare marks), changed files update in place, and only
+    /// added or removed rows touch the collection.
+    /// </summary>
+    void MergeRefresh(List<FileItem> fresh, string? selectName)
+    {
+        var old = new Dictionary<string, FileItem>(StringComparer.Ordinal);
+        foreach (var item in _all)
+            old[item.Name] = item;
+
+        var current = CurrentItem;
+        var currentIndex = current is null ? -1 : Items.IndexOf(current);
+        var currentChanged = false;
+
+        var all = new List<FileItem>(fresh.Count);
+        foreach (var item in fresh)
+        {
+            if (old.TryGetValue(item.Name, out var existing) && existing.IsDirectory == item.IsDirectory)
+            {
+                if (existing.Size != item.Size || existing.Modified != item.Modified)
+                {
+                    existing.Size = item.Size;
+                    existing.Modified = item.Modified;
+                    currentChanged |= existing == current;
+                }
+                all.Add(existing);
+            }
+            else
+            {
+                all.Add(item);
+            }
+        }
+        _all = all;
+
+        var target = BuildView();
+        var keep = new HashSet<FileItem>(target, ReferenceEqualityComparer.Instance);
+        for (var i = Items.Count - 1; i >= 0; i--)
+        {
+            if (!keep.Contains(Items[i]))
+                Items.RemoveAt(i);
+        }
+        for (var i = 0; i < target.Count; i++)
+        {
+            if (i < Items.Count && ReferenceEquals(Items[i], target[i])) continue;
+            var from = IndexOfReference(Items, target[i], i + 1);
+            if (from >= 0)
+                Items.Move(from, i);
+            else
+                Items.Insert(i, target[i]);
+        }
+
+        SelectedItems = SelectedItems.Where(keep.Contains).ToList();
+        if (selectName is not null)
+        {
+            var select = Items.FirstOrDefault(i => string.Equals(i.Name, selectName, StringComparison.OrdinalIgnoreCase)) ?? current;
+            CurrentItem = select;
+            ItemsReloaded?.Invoke(select);
+        }
+        else if (current is not null && !keep.Contains(current))
+        {
+            // The focused row went away: focus its neighbour.
+            var neighbour = Items.Count == 0 ? null : Items[Math.Clamp(currentIndex, 0, Items.Count - 1)];
+            CurrentItem = neighbour;
+            ItemsReloaded?.Invoke(neighbour);
+        }
+        else if (CurrentItem != current)
+        {
+            CurrentItem = current; // the list may have cleared it while rows moved
+        }
+        else if (currentChanged)
+        {
+            OnPropertyChanged(nameof(CurrentItem)); // let the preview pick up the new size or contents
+        }
+        UpdateStatus();
+    }
+
+    static int IndexOfReference(IList<FileItem> list, FileItem item, int start)
+    {
+        for (var i = start; i < list.Count; i++)
+        {
+            if (ReferenceEquals(list[i], item))
+                return i;
+        }
+        return -1;
+    }
+
+    List<FileItem> BuildView()
+    {
         IEnumerable<FileItem> view = _all;
         if (!string.IsNullOrWhiteSpace(Filter))
             view = view.Where(i => i.Name.Contains(Filter.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -230,17 +377,7 @@ public partial class TabViewModel : ViewModelBase
         var sorted = SortAscending
             ? folders.OrderBy(folderKey, comparer).Concat(files.OrderBy(key, comparer))
             : folders.OrderByDescending(folderKey, comparer).Concat(files.OrderByDescending(key, comparer));
-
-        Items.Clear();
-        foreach (var item in sorted)
-            Items.Add(item);
-
-        var select = selectName is null ? null : Items.FirstOrDefault(i => string.Equals(i.Name, selectName, StringComparison.OrdinalIgnoreCase));
-        select ??= Items.FirstOrDefault();
-        SelectedItems = [];
-        CurrentItem = select;
-        UpdateStatus();
-        ItemsReloaded?.Invoke(select);
+        return sorted.ToList();
     }
 
     void RebuildBreadcrumbs()
@@ -278,5 +415,9 @@ public partial class TabViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanGoForward));
     }
 
-    partial void OnCurrentPathChanged(string value) => OnPropertyChanged(nameof(CanGoUp));
+    partial void OnCurrentPathChanged(string value)
+    {
+        OnPropertyChanged(nameof(CanGoUp));
+        _watcher.Watch(value);
+    }
 }
