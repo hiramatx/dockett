@@ -39,6 +39,8 @@ public partial class FilePaneView : UserControl
         AddHandler(PointerPressedEvent, (_, _) => _pane?.RequestActivation(), RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(GotFocusEvent, (_, _) => _pane?.RequestActivation(), RoutingStrategies.Bubble, handledEventsToo: true);
 
+        // Tunnel, so this runs before the list's ScrollViewer takes Page Up/Down for plain scrolling.
+        List.AddHandler(KeyDownEvent, OnListPageKey, RoutingStrategies.Tunnel);
         List.AddHandler(PointerPressedEvent, OnListPointerPressed, RoutingStrategies.Tunnel);
         List.AddHandler(PointerMovedEvent, OnListPointerMoved, RoutingStrategies.Tunnel);
         List.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -132,6 +134,47 @@ public partial class FilePaneView : UserControl
                 await _tab.GoUpAsync();
                 break;
         }
+    }
+
+    /// <summary>
+    /// Page Up/Down move the focused row (and the selection, extended with Shift) like Explorer,
+    /// instead of only scrolling, which left the selection and preview behind.
+    /// </summary>
+    void OnListPageKey(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is not (Key.PageDown or Key.PageUp) || (e.KeyModifiers & ~KeyModifiers.Shift) != 0) return;
+        var count = List.ItemCount;
+        if (count == 0) return;
+        e.Handled = true;
+
+        var scroller = List.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+        var focusedIndex = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is ListBoxItem focused
+            ? List.IndexFromContainer(focused)
+            : -1;
+        var current = focusedIndex >= 0 ? focusedIndex : List.SelectedIndex;
+        var rowHeight = (current >= 0 ? List.ContainerFromIndex(current) : null)?.Bounds.Height is > 0 and var h ? h : 26;
+        var target = ListPaging.Target(current, count, scroller?.Offset.Y ?? 0, scroller?.Viewport.Height ?? 0, rowHeight,
+            down: e.Key == Key.PageDown);
+        if (target < 0) return;
+
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            var selection = List.Selection;
+            var anchor = selection.AnchorIndex >= 0 ? selection.AnchorIndex : Math.Max(current, 0);
+            selection.BeginBatchUpdate();
+            selection.Clear();
+            selection.SelectRange(Math.Min(anchor, target), Math.Max(anchor, target));
+            selection.AnchorIndex = anchor;
+            selection.EndBatchUpdate();
+        }
+        else
+        {
+            List.SelectedIndex = target;
+        }
+
+        List.ScrollIntoView(target);
+        // Unspecified, not Directional: directional focus would re-select just this row and undo a Shift range.
+        Dispatcher.UIThread.Post(() => List.ContainerFromIndex(target)?.Focus(NavigationMethod.Unspecified), DispatcherPriority.Background);
     }
 
     void OnTabPointerPressed(object? sender, PointerPressedEventArgs e)
