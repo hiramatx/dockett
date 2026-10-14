@@ -16,9 +16,16 @@ public partial class MainWindow : Window, IUiHost
     MainViewModel? _vm;
     GridLength _previewWidth = new(260);
 
+    // Last position and size while not maximized, so a maximized window restores to sensible bounds.
+    PixelPoint _normalPosition;
+    Size _normalSize;
+
     public MainWindow()
     {
         InitializeComponent();
+        _normalSize = new Size(Width, Height);
+        PositionChanged += (_, _) => TrackNormalBounds();
+        SizeChanged += (_, _) => TrackNormalBounds();
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
         foreach (var pane in new[] { LeftPane, RightPane })
         {
@@ -28,6 +35,75 @@ public partial class MainWindow : Window, IUiHost
         }
         Opened += (_, _) => Dispatcher.UIThread.Post(() => ActivePaneView?.FocusList(), DispatcherPriority.Background);
         Opened += (_, _) => Dispatcher.UIThread.Post(HideBuiltInTitle, DispatcherPriority.Background);
+    }
+
+    // ---- Session ----
+
+    /// <summary>
+    /// Remembers bounds while the window is in its normal state. Maximizing raises the size and position
+    /// events before WindowState changes, so check the state once things have settled.
+    /// </summary>
+    void TrackNormalBounds() => Dispatcher.UIThread.Post(() =>
+    {
+        if (WindowState != WindowState.Normal) return;
+        _normalPosition = Position;
+        _normalSize = ClientSize;
+    }, DispatcherPriority.Background);
+
+    /// <summary>Restores size, position, and panel widths. Call before the window is shown.</summary>
+    public void ApplyPlacement(WindowPlacement? placement)
+    {
+        if (placement is null) return;
+
+        if (placement.Width >= MinWidth && placement.Height >= MinHeight)
+        {
+            Width = placement.Width;
+            Height = placement.Height;
+            _normalSize = new Size(Width, Height);
+        }
+
+        // Only restore the position if it's still on a connected screen.
+        var position = new PixelPoint(placement.X, placement.Y);
+        if (Screens.ScreenFromPoint(position + new PixelPoint(60, 20)) is not null)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Position = position;
+            _normalPosition = position;
+        }
+        if (placement.Maximized)
+            WindowState = WindowState.Maximized;
+
+        var columns = MainGrid.ColumnDefinitions;
+        if (placement.NavWidth >= 80)
+            columns[0].Width = new GridLength(placement.NavWidth);
+        if (placement.PreviewWidth >= 80)
+        {
+            _previewWidth = new GridLength(placement.PreviewWidth);
+            ApplyPreviewVisibility();
+        }
+        var share = Math.Clamp(placement.LeftShare, 0.1, 0.9);
+        columns[2].Width = new GridLength(share, GridUnitType.Star);
+        columns[4].Width = new GridLength(1 - share, GridUnitType.Star);
+    }
+
+    /// <summary>Everything to save on close: the view model's tabs plus this window's placement.</summary>
+    public SessionState CaptureSession()
+    {
+        var columns = MainGrid.ColumnDefinitions;
+        var normal = WindowState == WindowState.Normal;
+        var panes = columns[2].ActualWidth + columns[4].ActualWidth;
+        var placement = new WindowPlacement
+        {
+            X = normal ? Position.X : _normalPosition.X,
+            Y = normal ? Position.Y : _normalPosition.Y,
+            Width = normal ? ClientSize.Width : _normalSize.Width,
+            Height = normal ? ClientSize.Height : _normalSize.Height,
+            Maximized = WindowState == WindowState.Maximized,
+            NavWidth = columns[0].ActualWidth,
+            PreviewWidth = PreviewPanel.IsVisible ? columns[6].ActualWidth : _previewWidth.Value,
+            LeftShare = panes > 0 ? columns[2].ActualWidth / panes : 0.5,
+        };
+        return (_vm?.CaptureSession() ?? new SessionState()) with { Window = placement };
     }
 
     public nint OwnerHandle => TryGetPlatformHandle()?.Handle ?? 0;

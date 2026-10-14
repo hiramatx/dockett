@@ -27,8 +27,10 @@ public partial class TabViewModel : ViewModelBase, IDisposable
     bool _suppressFilterView;
     bool _disposed;
 
-    public TabViewModel(string path)
+    public TabViewModel(string path, SortColumn sortBy = SortColumn.Name, bool sortAscending = true)
     {
+        SortBy = sortBy;
+        SortAscending = sortAscending;
         _ui = SynchronizationContext.Current;
         _watcher.Changed += OnFolderChanged;
         CurrentPath = path;

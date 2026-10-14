@@ -10,15 +10,18 @@ public partial class MainViewModel : ViewModelBase
 {
     TabViewModel? _watchedTab;
 
-    /// <param name="startPaths">Optional folders for the left and right panes, e.g. from the command line.</param>
-    public MainViewModel(IReadOnlyList<string>? startPaths = null)
+    /// <param name="startPaths">Optional folders for the left and right panes, e.g. from the command line. These win over the session.</param>
+    /// <param name="session">The previous session to restore, if any.</param>
+    public MainViewModel(IReadOnlyList<string>? startPaths = null, SessionState? session = null)
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var systemRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? home;
         var valid = (startPaths ?? []).Where(Directory.Exists).Select(Path.GetFullPath).ToList();
+        if (valid.Count > 0)
+            session = session is null ? null : session with { Left = null, Right = null, RightPaneActive = false };
 
-        Left = new PaneViewModel("Left", [valid.ElementAtOrDefault(0) ?? home]);
-        Right = new PaneViewModel("Right", [valid.ElementAtOrDefault(1) ?? systemRoot]);
+        Left = RestorePane("Left", session?.Left, valid.ElementAtOrDefault(0) ?? home);
+        Right = RestorePane("Right", session?.Right, valid.ElementAtOrDefault(1) ?? systemRoot);
         NavSections = FileSystemService.BuildNavSections();
 
         foreach (var pane in new[] { Left, Right })
@@ -26,10 +29,42 @@ public partial class MainViewModel : ViewModelBase
             pane.ActivationRequested += Activate;
             pane.PropertyChanged += OnPanePropertyChanged;
         }
-        ActivePane = Left;
-        Left.IsActive = true;
+        ActivePane = session?.RightPaneActive == true ? Right : Left;
+        ActivePane.IsActive = true;
+        IsPreviewVisible = session?.PreviewVisible ?? true;
         WatchActiveTab();
     }
+
+    /// <summary>
+    /// Rebuilds a pane from its saved tabs. A tab whose folder is gone opens the nearest folder above it that
+    /// still exists; tabs on drives that are gone are dropped. With nothing left, the pane opens <paramref name="fallback"/>.
+    /// </summary>
+    static PaneViewModel RestorePane(string name, PaneState? saved, string fallback)
+    {
+        var tabs = new List<TabState>();
+        var selected = 0;
+        if (saved is not null)
+        {
+            for (var i = 0; i < saved.Tabs.Count; i++)
+            {
+                if (SessionStore.NearestExisting(saved.Tabs[i].Path) is not { } path) continue;
+                if (i == saved.SelectedIndex) selected = tabs.Count;
+                tabs.Add(saved.Tabs[i] with { Path = path });
+            }
+        }
+        return tabs.Count > 0
+            ? new PaneViewModel(name, tabs, selected)
+            : new PaneViewModel(name, [fallback]);
+    }
+
+    /// <summary>The panes, tabs, and preview state to save; the window adds its own placement.</summary>
+    public SessionState CaptureSession() => new()
+    {
+        Left = Left.Capture(),
+        Right = Right.Capture(),
+        RightPaneActive = ActivePane == Right,
+        PreviewVisible = IsPreviewVisible,
+    };
 
     /// <summary>Set by the window once it exists.</summary>
     public IUiHost? Host { get; set; }

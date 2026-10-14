@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Dockett.Models;
 
 namespace Dockett.ViewModels;
 
@@ -8,13 +9,25 @@ namespace Dockett.ViewModels;
 public partial class PaneViewModel : ViewModelBase
 {
     public PaneViewModel(string name, IEnumerable<string> startPaths)
+        : this(name, startPaths.Select(p => new TabState { Path = p }), 0)
+    {
+    }
+
+    /// <summary>Creates the pane from saved tabs; <paramref name="tabs"/> must not be empty.</summary>
+    public PaneViewModel(string name, IEnumerable<TabState> tabs, int selectedIndex)
     {
         Name = name;
-        foreach (var path in startPaths)
-            Tabs.Add(new TabViewModel(path));
-        SelectedTab = Tabs[0];
+        foreach (var tab in tabs)
+            Tabs.Add(new TabViewModel(tab.Path, tab.SortBy, tab.SortAscending));
+        SelectedTab = Tabs[Math.Clamp(selectedIndex, 0, Tabs.Count - 1)];
         Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(CanCloseTabs));
     }
+
+    public PaneState Capture() => new()
+    {
+        Tabs = Tabs.Select(t => new TabState { Path = t.CurrentPath, SortBy = t.SortBy, SortAscending = t.SortAscending }).ToList(),
+        SelectedIndex = Tabs.IndexOf(SelectedTab),
+    };
 
     public string Name { get; }
 
