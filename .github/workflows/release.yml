@@ -16,9 +16,9 @@ jobs:
   release:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -46,13 +46,15 @@ jobs:
       - name: Write checksums
         shell: pwsh
         run: |
-          Get-ChildItem artifacts/*.zip | ForEach-Object {
+          # LF line endings so `sha256sum -c SHA256SUMS.txt` works on Linux, macOS, and Git Bash.
+          $lines = Get-ChildItem artifacts/*.zip | ForEach-Object {
             "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
-          } | Set-Content -Encoding ascii artifacts/SHA256SUMS.txt
+          }
+          [IO.File]::WriteAllText("$PWD/artifacts/SHA256SUMS.txt", ($lines -join "`n") + "`n")
           Get-Content artifacts/SHA256SUMS.txt
 
       - name: Attach zips to this run
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dockett-${{ steps.version.outputs.version }}
           path: |
