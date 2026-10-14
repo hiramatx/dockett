@@ -31,6 +31,10 @@ public partial class FileItem : ObservableObject
     [ObservableProperty]
     public partial bool IsDifferent { get; set; }
 
+    /// <summary>True while this item is on the clipboard as a cut; shown faded.</summary>
+    [ObservableProperty]
+    public partial bool IsCut { get; set; }
+
     public string SizeText => IsDirectory ? "" : Format.Size(Size);
     public string ModifiedText => Modified.ToString("yyyy-MM-dd  HH:mm");
     public string TypeText => IsDirectory ? "Folder" : FileTypes.Describe(Path.GetExtension(Name));

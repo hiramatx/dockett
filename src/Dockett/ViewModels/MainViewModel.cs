@@ -372,6 +372,148 @@ public partial class MainViewModel : ViewModelBase
         ShellOperations.ShowProperties(Host.OwnerHandle, path);
     }
 
+    // ---- Clipboard ----
+
+    [RelayCommand]
+    Task CopyToClipboard() => PutOnClipboard(cut: false);
+
+    [RelayCommand]
+    Task CutToClipboard() => PutOnClipboard(cut: true);
+
+    async Task PutOnClipboard(bool cut)
+    {
+        var items = ActiveTab.TargetItems;
+        if (items.Count == 0) return;
+        try
+        {
+            WindowsClipboard.SetFiles(Paths(items), cut);
+        }
+        catch (IOException e)
+        {
+            await Alert("Couldn't use the clipboard", e.Message);
+            return;
+        }
+        MarkCut(cut ? Paths(items) : []);
+        StatusMessage = $"{(cut ? "Cut" : "Copied")} {Describe(items)}";
+    }
+
+    /// <summary>Pastes files from the clipboard (from Dockett or Explorer) into <paramref name="targetFolder"/> or the active folder.</summary>
+    [RelayCommand]
+    async Task Paste(string? targetFolder)
+    {
+        if (Host is null) return;
+        var target = targetFolder ?? ActiveTab.CurrentPath;
+
+        (List<string> Paths, bool Cut)? clip;
+        try
+        {
+            clip = WindowsClipboard.GetFiles();
+        }
+        catch (IOException e)
+        {
+            await Alert("Couldn't use the clipboard", e.Message);
+            return;
+        }
+        if (clip is not { Paths.Count: > 0 } files)
+        {
+            StatusMessage = "There are no files on the clipboard";
+            return;
+        }
+        if (files.Cut && files.Paths.All(p => SameFolder(Path.GetDirectoryName(p) ?? "", target)))
+            return; // cut and pasted back where it came from
+
+        var ok = await RunTool(() => files.Cut
+            ? ShellOperations.MoveAsync(Host.OwnerHandle, files.Paths, target)
+            : ShellOperations.CopyAsync(Host.OwnerHandle, files.Paths, target));
+        if (ok && files.Cut)
+        {
+            // Like Explorer, a cut can only be pasted once.
+            WindowsClipboard.Clear();
+            MarkCut([]);
+        }
+
+        var label = files.Paths.Count == 1 ? $"“{Path.GetFileName(files.Paths[0])}”" : Format.Count(files.Paths.Count, "item");
+        StatusMessage = ok ? $"Pasted {label}" : "Paste cancelled or incomplete";
+        await RefreshFoldersShowing([target, .. files.Paths.Select(Path.GetDirectoryName).OfType<string>()]);
+    }
+
+    /// <summary>Fades rows that are on the clipboard as a cut, like Explorer.</summary>
+    void MarkCut(IEnumerable<string> paths)
+    {
+        var set = paths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in Left.Tabs.Concat(Right.Tabs).SelectMany(t => t.Items))
+            item.IsCut = set.Contains(item.FullPath);
+    }
+
+    [RelayCommand]
+    void CopyPath()
+    {
+        var items = ActiveTab.TargetItems;
+        var text = items.Count == 0 ? ActiveTab.CurrentPath : string.Join(Environment.NewLine, Paths(items));
+        CopyText(text, items.Count <= 1 ? "path" : "paths");
+    }
+
+    [RelayCommand]
+    void CopyFolderPath() => CopyText(ActiveTab.CurrentPath, "path");
+
+    void CopyText(string text, string what)
+    {
+        try
+        {
+            WindowsClipboard.SetText(text);
+            StatusMessage = $"Copied {what}";
+        }
+        catch (IOException e)
+        {
+            StatusMessage = e.Message;
+        }
+    }
+
+    // ---- Context menu actions ----
+
+    [RelayCommand]
+    Task OpenInNewTab(FileItem item) => ActivePane.OpenTabAsync(item.FullPath);
+
+    [RelayCommand]
+    async Task OpenInOtherPane(FileItem item)
+    {
+        var pane = InactivePane;
+        if (await pane.SelectedTab.NavigateAsync(item.FullPath))
+            Activate(pane);
+    }
+
+    [RelayCommand]
+    void OpenWith(FileItem item)
+    {
+        if (Host is not null)
+            ShellOperations.OpenWith(Host.OwnerHandle, item.FullPath);
+    }
+
+    [RelayCommand]
+    void OpenTerminal(string? folder) => Launch(() => ShellOperations.OpenTerminal(folder ?? ActiveTab.CurrentPath));
+
+    [RelayCommand]
+    void RevealInExplorer(string? path) => Launch(() => ShellOperations.RevealInExplorer(path ?? ActiveTab.CurrentPath));
+
+    [RelayCommand]
+    void FolderProperties()
+    {
+        if (Host is not null)
+            ShellOperations.ShowProperties(Host.OwnerHandle, ActiveTab.CurrentPath);
+    }
+
+    void Launch(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            StatusMessage = e.Message;
+        }
+    }
+
     // ---- Drag and drop ----
 
     /// <summary>Copies or moves dropped items into <paramref name="targetFolder"/>. Drops don't ask for confirmation.</summary>

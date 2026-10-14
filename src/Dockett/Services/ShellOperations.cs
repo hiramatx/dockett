@@ -26,14 +26,41 @@ public static class ShellOperations
     public static void Open(string path) =>
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
 
-    public static void ShowProperties(nint owner, string path)
+    /// <summary>Shows Windows' "Open with" chooser for a file.</summary>
+    public static void OpenWith(nint owner, string path) => ShellExecuteVerb(owner, path, "openas");
+
+    /// <summary>Opens Windows Terminal in <paramref name="folder"/>, or PowerShell when Terminal isn't installed.</summary>
+    public static void OpenTerminal(string folder)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("wt.exe") { ArgumentList = { "-d", folder }, UseShellExecute = true });
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            Process.Start(new ProcessStartInfo("powershell.exe") { WorkingDirectory = folder, UseShellExecute = true });
+        }
+    }
+
+    /// <summary>Opens Explorer with <paramref name="path"/> selected (or opens the folder itself when it's a drive root).</summary>
+    public static void RevealInExplorer(string path)
+    {
+        var start = Path.GetPathRoot(path) == path
+            ? new ProcessStartInfo("explorer.exe") { ArgumentList = { path } }
+            : new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"");
+        Process.Start(start);
+    }
+
+    public static void ShowProperties(nint owner, string path) => ShellExecuteVerb(owner, path, "properties");
+
+    static void ShellExecuteVerb(nint owner, string path, string verb)
     {
         var info = new SHELLEXECUTEINFO
         {
             cbSize = Marshal.SizeOf<SHELLEXECUTEINFO>(),
             fMask = SEE_MASK_INVOKEIDLIST,
             hwnd = owner,
-            lpVerb = "properties",
+            lpVerb = verb,
             lpFile = path,
             nShow = 1,
         };

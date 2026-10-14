@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -27,6 +28,9 @@ public partial class FilePaneView : UserControl
 
     // Drop target state
     ListBoxItem? _dropRow;
+
+    // Context menu state
+    bool _shiftRightClick;
 
     public FilePaneView()
     {
@@ -149,7 +153,16 @@ public partial class FilePaneView : UserControl
     {
         _dragPress = null;
         _collapseSelectionTo = null;
-        if (!e.GetCurrentPoint(List).Properties.IsLeftButtonPressed || ItemAt(e.Source) is not { } item)
+        var properties = e.GetCurrentPoint(List).Properties;
+        if (properties.IsRightButtonPressed)
+        {
+            _shiftRightClick = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+            // Right-clicking inside the selection keeps it, so the menu acts on all selected rows.
+            if (ItemAt(e.Source) is { } clicked && List.SelectedItems?.Contains(clicked) == true)
+                e.Handled = true;
+            return;
+        }
+        if (!properties.IsLeftButtonPressed || ItemAt(e.Source) is not { } item)
             return;
 
         _dragPress = e;
@@ -300,4 +313,73 @@ public partial class FilePaneView : UserControl
         DropAction.Move => DragDropEffects.Move,
         _ => DragDropEffects.None,
     };
+
+    // ---- Context menu ----
+
+    void OnContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        if (_tab is null || TopLevel.GetTopLevel(this)?.DataContext is not MainViewModel vm) return;
+        e.Handled = true;
+        _pane?.RequestActivation();
+
+        // Mouse: the row under the pointer. Keyboard (Menu key, Shift+F10): the focused row.
+        var byPointer = e.TryGetPosition(List, out var position);
+        var item = byPointer ? ItemAt(List.InputHitTest(position)) : _tab.CurrentItem;
+        var shift = byPointer && _shiftRightClick;
+        _shiftRightClick = false;
+
+        if (item is null)
+        {
+            List.SelectedItems?.Clear();
+        }
+        else if (List.SelectedItems?.Contains(item) != true)
+        {
+            List.SelectedItems?.Clear();
+            List.SelectedItem = item;
+        }
+        _tab.CurrentItem = item ?? _tab.CurrentItem;
+
+        var container = item is null ? null : List.ContainerFromItem(item) as Control;
+        var screen = byPointer
+            ? List.PointToScreen(position)
+            : container?.PointToScreen(new Point(8, container.Bounds.Height)) ?? List.PointToScreen(new Point(8, 8));
+
+        if (shift && item is not null)
+        {
+            // Like Explorer on Windows 11: Shift+right-click goes straight to the full Windows menu.
+            ShowShellMenu(screen, extended: true);
+            return;
+        }
+
+        var menu = FileContextMenu.Build(vm, item, () =>
+            Dispatcher.UIThread.Post(() => ShowShellMenu(screen, extended: false), DispatcherPriority.Background));
+        menu.Closed += (_, _) => FocusList();
+        if (byPointer)
+        {
+            menu.Placement = PlacementMode.Pointer;
+            menu.Open(List);
+        }
+        else
+        {
+            menu.Placement = PlacementMode.BottomEdgeAlignedLeft;
+            menu.PlacementTarget = container ?? List;
+            menu.Open(container ?? List);
+        }
+    }
+
+    void ShowShellMenu(PixelPoint screen, bool extended)
+    {
+        var paths = _tab?.TargetItems.Select(i => i.FullPath).ToList() ?? [];
+        var owner = TopLevel.GetTopLevel(this)?.TryGetPlatformHandle()?.Handle ?? 0;
+        try
+        {
+            ShellContextMenu.Show(owner, paths, screen.X, screen.Y, extended);
+        }
+        catch (Exception e) when (e is System.Runtime.InteropServices.COMException or ArgumentException or UnauthorizedAccessException)
+        {
+            // The shell couldn't build a menu for these items; nothing useful to show.
+            System.Diagnostics.Debug.WriteLine(e);
+        }
+        FocusList();
+    }
 }

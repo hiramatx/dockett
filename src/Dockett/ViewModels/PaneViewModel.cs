@@ -44,9 +44,12 @@ public partial class PaneViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    public async Task NewTab()
+    public Task NewTab() => OpenTabAsync(SelectedTab.CurrentPath);
+
+    /// <summary>Opens <paramref name="path"/> in a new tab next to the current one.</summary>
+    public async Task OpenTabAsync(string path)
     {
-        var tab = new TabViewModel(SelectedTab.CurrentPath);
+        var tab = new TabViewModel(path);
         Tabs.Insert(Tabs.IndexOf(SelectedTab) + 1, tab);
         SelectedTab = tab;
         RequestActivation();

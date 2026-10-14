@@ -9,6 +9,7 @@ A dual pane file manager for Windows, built with C# and [Avalonia UI](https://av
 - Preview panel for images, text and code files, and folder details
 - Tools strip: copy and move to the other pane, rename, new folder, compress to zip, compare folders, properties, delete to Recycle Bin
 - Drag and drop between panes, onto folder rows, and to or from Explorer. Same drive moves, another drive copies; hold Ctrl to copy or Shift to move
+- Right-click menu with open in new tab or other pane, Open with, cut/copy/paste (works with Explorer's clipboard), copy path, Open in Terminal, and Show in Explorer. "Show more options" (or Shift+right-click) opens the full Windows menu with shell extensions like 7-Zip and Send to
 - Copy, move, rename and delete go through the Windows shell, so you get the native progress and conflict dialogs and Explorer's Undo
 - Light and dark themes follow Windows
 
@@ -26,7 +27,7 @@ Optionally pass start folders for the left and right panes:
 dotnet run --project src/Dockett -- "C:\Projects" "D:\Backup"
 ```
 
-Run the tests with `dotnet test`.
+Run the tests with `dotnet test`. Clipboard tests are skipped by default because they replace what's on the clipboard; set `DOCKETT_CLIPBOARD_TESTS=1` to include them.
 
 ## Keyboard
 
@@ -45,6 +46,8 @@ Run the tests with `dotnet test`.
 | Ctrl+Tab / Ctrl+Shift+Tab | Next / previous tab |
 | Ctrl+L or Alt+D | Type a path |
 | Ctrl+F | Filter the current folder |
+| Ctrl+X / Ctrl+C / Ctrl+V | Cut / copy / paste files |
+| Ctrl+Shift+C | Copy path |
 | Ctrl+R | Refresh |
 
 ## Project layout

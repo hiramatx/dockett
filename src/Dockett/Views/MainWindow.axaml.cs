@@ -150,6 +150,10 @@ public partial class MainWindow : Window, IUiHost
             (Key.W, KeyModifiers.Control) => () => { _vm.CloseTabCommand.Execute(null); FocusActiveList(); },
             (Key.L, KeyModifiers.Control) or (Key.D, KeyModifiers.Alt) => () => _vm.BeginEditAddressCommand.Execute(null),
             (Key.F, KeyModifiers.Control) => () => SearchBox.Focus(),
+            (Key.C, KeyModifiers.Control) => () => Run(_vm.CopyToClipboardCommand),
+            (Key.X, KeyModifiers.Control) => () => Run(_vm.CutToClipboardCommand),
+            (Key.V, KeyModifiers.Control) => () => Run(_vm.PasteCommand),
+            (Key.C, KeyModifiers.Control | KeyModifiers.Shift) => () => _vm.CopyPathCommand.Execute(null),
             _ => null,
         };
         if (action is null) return;
