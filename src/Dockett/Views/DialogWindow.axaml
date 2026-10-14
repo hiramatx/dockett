@@ -1,0 +1,19 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Dockett.Views.DialogWindow"
+        Width="420" SizeToContent="Height" CanResize="False" CanMinimize="False" CanMaximize="False"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner" WindowDecorations="BorderOnly"
+        Icon="/Assets/dockett.ico"
+        Background="{DynamicResource Surface2}">
+  <Border BorderBrush="{DynamicResource LineStrong}" BorderThickness="1">
+    <StackPanel Margin="20" Spacing="12">
+      <TextBlock x:Name="TitleText" FontSize="16" FontWeight="SemiBold" />
+      <TextBlock x:Name="MessageText" TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}" />
+      <TextBox x:Name="Input" IsVisible="False" />
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+        <Button x:Name="CancelButton" Content="Cancel" MinWidth="84" HorizontalContentAlignment="Center" Click="OnCancel" />
+        <Button x:Name="ConfirmButton" Classes="accent" MinWidth="84" HorizontalContentAlignment="Center" Click="OnConfirm" />
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

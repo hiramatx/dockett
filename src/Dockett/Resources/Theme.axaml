@@ -1,0 +1,49 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Flat palette. Surfaces step from Surface0 (chrome) to Surface2 (content). -->
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="Surface0" Color="#EEF0F3" />
+      <SolidColorBrush x:Key="Surface1" Color="#F6F7F9" />
+      <SolidColorBrush x:Key="Surface2" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="Hover" Color="#0F000000" />
+      <SolidColorBrush x:Key="Line" Color="#1A000000" />
+      <SolidColorBrush x:Key="LineStrong" Color="#2E000000" />
+      <SolidColorBrush x:Key="TextPrimary" Color="#1D1F23" />
+      <SolidColorBrush x:Key="TextSecondary" Color="#5B616B" />
+      <SolidColorBrush x:Key="TextMuted" Color="#8A9099" />
+      <SolidColorBrush x:Key="Accent" Color="#1F6FEB" />
+      <SolidColorBrush x:Key="AccentText" Color="#1558C0" />
+      <SolidColorBrush x:Key="AccentSoft" Color="#DCE8FC" />
+      <SolidColorBrush x:Key="AccentSoftInactive" Color="#E8EBEF" />
+      <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="FolderBrush" Color="#E0A526" />
+      <SolidColorBrush x:Key="Danger" Color="#C93636" />
+      <SolidColorBrush x:Key="DangerSoft" Color="#FBE7E7" />
+      <SolidColorBrush x:Key="Warning" Color="#D98A0B" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="Surface0" Color="#17181B" />
+      <SolidColorBrush x:Key="Surface1" Color="#1D1F22" />
+      <SolidColorBrush x:Key="Surface2" Color="#232529" />
+      <SolidColorBrush x:Key="Hover" Color="#14FFFFFF" />
+      <SolidColorBrush x:Key="Line" Color="#1FFFFFFF" />
+      <SolidColorBrush x:Key="LineStrong" Color="#33FFFFFF" />
+      <SolidColorBrush x:Key="TextPrimary" Color="#E8EAED" />
+      <SolidColorBrush x:Key="TextSecondary" Color="#A9AFB8" />
+      <SolidColorBrush x:Key="TextMuted" Color="#7A808A" />
+      <SolidColorBrush x:Key="Accent" Color="#4C8DF6" />
+      <SolidColorBrush x:Key="AccentText" Color="#8AB4FA" />
+      <SolidColorBrush x:Key="AccentSoft" Color="#1E3A66" />
+      <SolidColorBrush x:Key="AccentSoftInactive" Color="#2E3238" />
+      <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="FolderBrush" Color="#E8B44A" />
+      <SolidColorBrush x:Key="Danger" Color="#F07070" />
+      <SolidColorBrush x:Key="DangerSoft" Color="#3D2224" />
+      <SolidColorBrush x:Key="Warning" Color="#F0A93A" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+
+  <Color x:Key="SystemAccentColor">#1F6FEB</Color>
+  <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, monospace</FontFamily>
+</ResourceDictionary>
