@@ -1,18 +1,32 @@
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Dockett.Models;
+using Dockett.Services;
 using Dockett.ViewModels;
 
 namespace Dockett.Views;
 
 public partial class FilePaneView : UserControl
 {
+    const double DragThreshold = 6;
+
     PaneViewModel? _pane;
     TabViewModel? _tab;
+
+    // Drag source state
+    PointerPressedEventArgs? _dragPress;
+    Point _dragOrigin;
+    FileItem? _collapseSelectionTo;
+    bool _dragging;
+
+    // Drop target state
+    ListBoxItem? _dropRow;
 
     public FilePaneView()
     {
@@ -20,10 +34,25 @@ public partial class FilePaneView : UserControl
         // Any click or focus inside the pane makes it the active one, even if a child handles the event.
         AddHandler(PointerPressedEvent, (_, _) => _pane?.RequestActivation(), RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(GotFocusEvent, (_, _) => _pane?.RequestActivation(), RoutingStrategies.Bubble, handledEventsToo: true);
+
+        List.AddHandler(PointerPressedEvent, OnListPointerPressed, RoutingStrategies.Tunnel);
+        List.AddHandler(PointerMovedEvent, OnListPointerMoved, RoutingStrategies.Tunnel);
+        List.AddHandler(PointerReleasedEvent, OnListPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+
+        AddHandler(DragDrop.DragEnterEvent, OnDragOver);
+        AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
+        AddHandler(DragDrop.DropEvent, OnDrop);
     }
 
     /// <summary>Raised on double-click or Enter.</summary>
     public event Action<FileItem>? ItemActivated;
+
+    /// <summary>Raised when files are dropped on this pane: sources, target folder, and what to do.</summary>
+    public event Action<IReadOnlyList<string>, string, DropAction>? FilesDropped;
+
+    /// <summary>Raised when a drag that started here was accepted somewhere, so source folders can refresh.</summary>
+    public event Action<IReadOnlyList<string>>? DragCompleted;
 
     public void FocusList()
     {
@@ -110,4 +139,165 @@ public partial class FilePaneView : UserControl
         else if (point.IsLeftButtonPressed)
             _pane.SelectTabCommand.Execute(tab);
     }
+
+    // ---- Drag source ----
+
+    static FileItem? ItemAt(object? source) =>
+        (source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as FileItem;
+
+    void OnListPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _dragPress = null;
+        _collapseSelectionTo = null;
+        if (!e.GetCurrentPoint(List).Properties.IsLeftButtonPressed || ItemAt(e.Source) is not { } item)
+            return;
+
+        _dragPress = e;
+        _dragOrigin = e.GetPosition(List);
+
+        // Pressing on part of a multi-selection keeps the selection so it can be dragged as a group;
+        // a plain click (no drag) collapses it on release, like Explorer.
+        if (e.KeyModifiers == KeyModifiers.None && List.SelectedItems is { Count: > 1 } selected && selected.Contains(item))
+        {
+            _collapseSelectionTo = item;
+            e.Handled = true;
+        }
+    }
+
+    async void OnListPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_dragPress is null || _dragging) return;
+        if (!e.GetCurrentPoint(List).Properties.IsLeftButtonPressed)
+        {
+            _dragPress = null;
+            return;
+        }
+        var delta = e.GetPosition(List) - _dragOrigin;
+        if (Math.Abs(delta.X) < DragThreshold && Math.Abs(delta.Y) < DragThreshold) return;
+
+        var press = _dragPress;
+        _dragPress = null;
+        _collapseSelectionTo = null;
+        await StartDragAsync(press);
+    }
+
+    void OnListPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_collapseSelectionTo is { } item && !_dragging)
+        {
+            List.SelectedItems?.Clear();
+            List.SelectedItem = item;
+        }
+        _collapseSelectionTo = null;
+        _dragPress = null;
+    }
+
+    async Task StartDragAsync(PointerPressedEventArgs press)
+    {
+        var items = List.SelectedItems?.OfType<FileItem>().ToList() ?? [];
+        var storage = TopLevel.GetTopLevel(this)?.StorageProvider;
+        if (items.Count == 0 || storage is null) return;
+
+        _dragging = true;
+        try
+        {
+            var data = new DataTransfer();
+            var paths = new List<string>();
+            foreach (var item in items)
+            {
+                IStorageItem? storageItem = item.IsDirectory
+                    ? await storage.TryGetFolderFromPathAsync(item.FullPath)
+                    : await storage.TryGetFileFromPathAsync(item.FullPath);
+                if (storageItem is null) continue;
+                data.Add(DataTransferItem.CreateFile(storageItem));
+                paths.Add(item.FullPath);
+            }
+            if (paths.Count == 0) return;
+
+            var effect = await DragDrop.DoDragDropAsync(press, data, DragDropEffects.Copy | DragDropEffects.Move);
+            if (effect != DragDropEffects.None)
+                DragCompleted?.Invoke(paths);
+        }
+        finally
+        {
+            _dragging = false;
+        }
+    }
+
+    // ---- Drop target ----
+
+    static List<string> DroppedPaths(DragEventArgs e) =>
+        e.DataTransfer.TryGetFiles()?.Select(f => f.TryGetLocalPath()).OfType<string>().ToList() ?? [];
+
+    /// <summary>A folder row under the pointer, or else the folder this pane shows.</summary>
+    (string? Folder, ListBoxItem? Row) DropTargetAt(DragEventArgs e, IReadOnlyList<string> sources)
+    {
+        // Hit-test the pointer position; the event's Source isn't reliably the element under the pointer.
+        var row = (this.InputHitTest(e.GetPosition(this)) as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true);
+        if (row?.DataContext is FileItem { IsDirectory: true } folder
+            && !sources.Contains(folder.FullPath, StringComparer.OrdinalIgnoreCase))
+            return (folder.FullPath, row);
+        return (_tab is { ErrorText: null } tab ? tab.CurrentPath : null, null);
+    }
+
+    DropAction Evaluate(DragEventArgs e, out string? folder, out ListBoxItem? row, out List<string> sources)
+    {
+        sources = DroppedPaths(e);
+        (folder, row) = DropTargetAt(e, sources);
+        if (folder is null) return DropAction.None;
+
+        var action = DropRules.Choose(sources, folder, e.KeyModifiers.HasFlag(KeyModifiers.Control), e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+        // Respect what the drag source allows (some apps only offer copy).
+        if (action == DropAction.Move && !e.DragEffects.HasFlag(DragDropEffects.Move))
+            action = e.DragEffects.HasFlag(DragDropEffects.Copy) ? DropAction.Copy : DropAction.None;
+        if (action == DropAction.Copy && !e.DragEffects.HasFlag(DragDropEffects.Copy))
+            action = DropAction.None;
+        return action;
+    }
+
+    void OnDragOver(object? sender, DragEventArgs e)
+    {
+        var action = Evaluate(e, out _, out var row, out _);
+        e.DragEffects = ToEffects(action);
+        ShowDropTarget(action == DropAction.None ? null : row, action != DropAction.None && row is null);
+        e.Handled = true;
+    }
+
+    void OnDragLeave(object? sender, DragEventArgs e)
+    {
+        // DragLeave also fires when moving between child elements; only clear once the pointer leaves the pane.
+        if (!new Rect(Bounds.Size).Contains(e.GetPosition(this)))
+            ShowDropTarget(null, false);
+    }
+
+    void OnDrop(object? sender, DragEventArgs e)
+    {
+        var action = Evaluate(e, out var folder, out _, out var sources);
+        ShowDropTarget(null, false);
+        e.DragEffects = ToEffects(action);
+        e.Handled = true;
+        if (action != DropAction.None && folder is not null)
+        {
+            _pane?.RequestActivation();
+            FilesDropped?.Invoke(sources, folder, action);
+        }
+    }
+
+    void ShowDropTarget(ListBoxItem? row, bool wholePane)
+    {
+        if (_dropRow != row)
+        {
+            _dropRow?.Classes.Remove("dropTarget");
+            row?.Classes.Add("dropTarget");
+            _dropRow = row;
+        }
+        DropOverlay.IsVisible = wholePane;
+    }
+
+    static DragDropEffects ToEffects(DropAction action) => action switch
+    {
+        DropAction.Copy => DragDropEffects.Copy,
+        DropAction.Move => DragDropEffects.Move,
+        _ => DragDropEffects.None,
+    };
 }

@@ -160,6 +160,11 @@
     <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
     <Setter Property="BorderThickness" Value="1" />
   </Style>
+  <Style Selector="ListBox.files ListBoxItem.dropTarget /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoft}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
   <Style Selector="ListBox.files ListBoxItem:selected TextBlock.name">
     <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
   </Style>

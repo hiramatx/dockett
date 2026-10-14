@@ -6,7 +6,8 @@
              x:Class="Dockett.Views.FilePaneView"
              x:DataType="vm:PaneViewModel">
 
-  <Border x:Name="Root" Classes="pane" Classes.active="{Binding IsActive}" Background="{DynamicResource Surface2}">
+  <Border x:Name="Root" Classes="pane" Classes.active="{Binding IsActive}" Background="{DynamicResource Surface2}"
+          DragDrop.AllowDrop="True">
     <DockPanel>
       <!-- Tab strip -->
       <Border DockPanel.Dock="Top" Background="{DynamicResource Surface1}" Padding="6,6,6,0"
@@ -97,6 +98,9 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+        <!-- Shown while dragging files over the pane's empty space or a file row -->
+        <Border x:Name="DropOverlay" IsVisible="False" IsHitTestVisible="False" Margin="4"
+                BorderBrush="{DynamicResource Accent}" BorderThickness="2" CornerRadius="6" />
         <ProgressBar IsIndeterminate="True" IsVisible="{Binding SelectedTab.IsLoading}" VerticalAlignment="Top"
                      Height="2" MinHeight="2" Background="Transparent" Foreground="{DynamicResource Accent}" />
       </Panel>

@@ -372,6 +372,40 @@ public partial class MainViewModel : ViewModelBase
         ShellOperations.ShowProperties(Host.OwnerHandle, path);
     }
 
+    // ---- Drag and drop ----
+
+    /// <summary>Copies or moves dropped items into <paramref name="targetFolder"/>. Drops don't ask for confirmation.</summary>
+    public async Task DropFilesAsync(IReadOnlyList<string> sources, string targetFolder, DropAction action)
+    {
+        if (action == DropAction.None || sources.Count == 0 || Host is null) return;
+
+        var move = action == DropAction.Move;
+        var names = sources.Select(Path.GetFileName).ToList();
+        var label = names.Count == 1 ? $"“{names[0]}”" : Format.Count(names.Count, "item");
+        var ok = await RunTool(() => move
+            ? ShellOperations.MoveAsync(Host.OwnerHandle, sources, targetFolder)
+            : ShellOperations.CopyAsync(Host.OwnerHandle, sources, targetFolder));
+
+        var targetName = Path.GetFileName(Path.TrimEndingDirectorySeparator(targetFolder));
+        if (targetName.Length == 0)
+            targetName = targetFolder; // a drive root
+        StatusMessage = ok
+            ? $"{(move ? "Moved" : "Copied")} {label} to {targetName}"
+            : $"{(move ? "Move" : "Copy")} cancelled or incomplete";
+
+        var sourceFolders = sources.Select(s => Path.GetDirectoryName(s)).OfType<string>();
+        await RefreshFoldersShowing([targetFolder, .. sourceFolders]);
+    }
+
+    /// <summary>Refreshes every tab showing one of <paramref name="folders"/>, e.g. after a drag to another app moved files away.</summary>
+    public Task RefreshFoldersShowing(IEnumerable<string> folders)
+    {
+        var set = folders.Select(Path.TrimEndingDirectorySeparator).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Task.WhenAll(Left.Tabs.Concat(Right.Tabs)
+            .Where(t => set.Contains(Path.TrimEndingDirectorySeparator(t.CurrentPath)))
+            .Select(t => t.RefreshAsync()));
+    }
+
     // ---- Helpers ----
 
     async Task RefreshFolders(string sourceFolder, string? targetFolder, string? selectInSource = null, string? selectInTarget = null)

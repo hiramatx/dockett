@@ -20,8 +20,12 @@ public partial class MainWindow : Window, IUiHost
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
-        LeftPane.ItemActivated += OnItemActivated;
-        RightPane.ItemActivated += OnItemActivated;
+        foreach (var pane in new[] { LeftPane, RightPane })
+        {
+            pane.ItemActivated += OnItemActivated;
+            pane.FilesDropped += OnFilesDropped;
+            pane.DragCompleted += OnDragCompleted;
+        }
         Opened += (_, _) => Dispatcher.UIThread.Post(() => ActivePaneView?.FocusList(), DispatcherPriority.Background);
         Opened += (_, _) => Dispatcher.UIThread.Post(HideBuiltInTitle, DispatcherPriority.Background);
     }
@@ -71,6 +75,21 @@ public partial class MainWindow : Window, IUiHost
     }
 
     void OnItemActivated(FileItem item) => _vm?.OpenItemCommand.Execute(item);
+
+    async void OnFilesDropped(IReadOnlyList<string> sources, string targetFolder, DropAction action)
+    {
+        if (_vm is null) return;
+        // Let the OS drag loop finish before the shell shows any progress or conflict UI.
+        await Task.Yield();
+        await _vm.DropFilesAsync(sources, targetFolder, action);
+        FocusActiveList();
+    }
+
+    async void OnDragCompleted(IReadOnlyList<string> sources)
+    {
+        if (_vm is not null)
+            await _vm.RefreshFoldersShowing(sources.Select(Path.GetDirectoryName).OfType<string>());
+    }
 
     void FocusActiveList() => Dispatcher.UIThread.Post(() => ActivePaneView?.FocusList(), DispatcherPriority.Background);
 

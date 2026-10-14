@@ -7,6 +7,7 @@ A dual pane file manager for Windows, built with C# and [Avalonia UI](https://av
 - Address bar with clickable breadcrumbs; click the empty space (or Ctrl+L) to type a path
 - Preview panel for images, text and code files, and folder details
 - Tools strip: copy and move to the other pane, rename, new folder, compress to zip, compare folders, properties, delete to Recycle Bin
+- Drag and drop between panes, onto folder rows, and to or from Explorer. Same drive moves, another drive copies; hold Ctrl to copy or Shift to move
 - Copy, move, rename and delete go through the Windows shell, so you get the native progress and conflict dialogs and Explorer's Undo
 - Light and dark themes follow Windows
 
