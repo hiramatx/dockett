@@ -105,7 +105,11 @@
                               CommandParameter="{Binding}">
                         <StackPanel Spacing="4">
                           <StackPanel Orientation="Horizontal" Spacing="9">
-                            <PathIcon Data="{Binding Icon, Converter={x:Static v:Converters.NavIconGeometry}}" />
+                            <Panel Width="16" Height="16">
+                              <Image Source="{Binding ShellIcon}" IsVisible="{Binding HasShellIcon}" Width="16" Height="16"
+                                     RenderOptions.BitmapInterpolationMode="HighQuality" />
+                              <PathIcon IsVisible="{Binding !HasShellIcon}" Data="{Binding Icon, Converter={x:Static v:Converters.NavIconGeometry}}" />
+                            </Panel>
                             <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                           </StackPanel>
                           <ProgressBar Classes="usage" IsVisible="{Binding HasUsage}" Value="{Binding UsagePercent}" Margin="24,0,4,2" />
@@ -151,7 +155,9 @@
                   <SelectableTextBlock Text="{Binding Preview.Text}" FontFamily="{StaticResource MonoFont}" FontSize="12"
                                        Foreground="{DynamicResource TextSecondary}" Margin="10" />
                 </ScrollViewer>
-                <PathIcon IsVisible="{Binding Preview.ShowGlyph}" Width="56" Height="56"
+                <Image Source="{Binding Preview.LargeIcon}" IsVisible="{Binding Preview.ShowLargeIcon}" Width="64" Height="64"
+                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                <PathIcon IsVisible="{Binding Preview.ShowShapeGlyph}" Width="56" Height="56"
                           Classes="fileIcon" Classes.folder="{Binding Preview.Item.IsDirectory}"
                           Data="{Binding Preview.Item.Kind, Converter={x:Static v:Converters.FileKindIcon}}" />
               </Panel>

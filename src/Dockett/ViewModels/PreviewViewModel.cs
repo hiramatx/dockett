@@ -28,6 +28,16 @@ public partial class PreviewViewModel : ViewModelBase
     [ObservableProperty]
     public partial bool HasItem { get; private set; }
 
+    /// <summary>The Windows icon at preview size, shown when there's no image or text to preview.</summary>
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(ShowLargeIcon), nameof(ShowShapeGlyph))]
+    public partial Bitmap? LargeIcon { get; private set; }
+
+    /// <summary>Loads a shell icon for a path at a pixel size; set by the app. Unset means shape glyphs only.</summary>
+    public static Func<string, Task<Bitmap?>>? LargeIconSource { get; set; }
+
+    public bool ShowLargeIcon => ShowGlyph && LargeIcon is not null;
+    public bool ShowShapeGlyph => ShowGlyph && LargeIcon is null;
+
     public bool ShowText => Text is not null;
     public bool ShowImage => Image is not null;
     public bool ShowGlyph => HasItem && Text is null && Image is null;
@@ -39,6 +49,7 @@ public partial class PreviewViewModel : ViewModelBase
 
         Item = item;
         HasItem = item is not null;
+        LargeIcon = null;
         SetContent(null, null);
         Details = item is null ? "" : BasicDetails(item);
         if (item is null) return;
@@ -48,6 +59,12 @@ public partial class PreviewViewModel : ViewModelBase
             // Debounce so holding an arrow key doesn't decode every image on the way.
             await Task.Delay(120, cts.Token);
             var ext = Path.GetExtension(item.Name);
+            if (LargeIconSource is { } iconSource && !FileTypes.IsPreviewableImage(ext))
+            {
+                var icon = await iconSource(item.FullPath);
+                if (cts.IsCancellationRequested) return;
+                LargeIcon = icon;
+            }
 
             if (item.IsDirectory)
             {
@@ -94,6 +111,8 @@ public partial class PreviewViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowText));
         OnPropertyChanged(nameof(ShowImage));
         OnPropertyChanged(nameof(ShowGlyph));
+        OnPropertyChanged(nameof(ShowLargeIcon));
+        OnPropertyChanged(nameof(ShowShapeGlyph));
     }
 
     static string BasicDetails(FileItem item) =>

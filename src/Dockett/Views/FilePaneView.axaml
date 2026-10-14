@@ -87,8 +87,13 @@
                         Background="{DynamicResource Warning}" IsVisible="{Binding IsDifferent}"
                         ToolTip.Tip="Missing from or different in the other pane" />
                 <DockPanel VerticalAlignment="Center">
-                  <PathIcon DockPanel.Dock="Left" Classes="fileIcon" Classes.folder="{Binding IsDirectory}" Margin="0,0,8,0"
-                            Data="{Binding Kind, Converter={x:Static v:Converters.FileKindIcon}}" />
+                  <Panel DockPanel.Dock="Left" Width="16" Height="16" Margin="0,0,8,0">
+                    <!-- Windows icon once loaded; a shape icon until then or if there is none -->
+                    <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="16" Height="16"
+                           RenderOptions.BitmapInterpolationMode="HighQuality" />
+                    <PathIcon Classes="fileIcon" Classes.folder="{Binding IsDirectory}" IsVisible="{Binding !HasIcon}"
+                              Data="{Binding Kind, Converter={x:Static v:Converters.FileKindIcon}}" />
+                  </Panel>
                   <TextBlock Classes="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                 </DockPanel>
                 <TextBlock Grid.Column="1" Classes="muted" Text="{Binding SizeText}" HorizontalAlignment="Right"

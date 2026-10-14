@@ -2,6 +2,7 @@
 
 A dual pane file manager for Windows, built with C# and [Avalonia UI](https://avaloniaui.net/).
 
+- Real Windows icons for files, folders, programs, and drives, loaded in the background and sized for your display scaling
 - Navigation pane with quick access folders, drives (with usage bars), and network drives
 - Two file panes, each with its own tabs, history, sorting, and filter
 - Address bar with clickable breadcrumbs; click the empty space (or Ctrl+L) to type a path
