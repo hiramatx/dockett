@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Dockett.Models;
 using Dockett.Services;
 using Dockett.ViewModels;
@@ -37,6 +38,11 @@ public partial class App : Application
             UseShellIcons(window, vm);
             window.ApplyPlacement(session?.Window);
             window.Closing += (_, _) => SessionStore.Save(window.CaptureSession());
+
+            // Pick up drives as they're plugged in or removed, and keep free space current.
+            var drives = new DriveMonitor();
+            drives.Changed += drivesAddedOrRemoved => Dispatcher.UIThread.Post(() => _ = vm.RefreshDrivesAsync());
+            desktop.Exit += (_, _) => drives.Dispose();
             vm.Host = window;
             desktop.MainWindow = window;
             _ = vm.InitializeAsync();
@@ -62,10 +68,7 @@ public partial class App : Application
         FileItem.IconSource = ShellIcons.ForItem;
         PreviewViewModel.LargeIconSource = path => ShellIcons.LoadAsync(path, large);
 
-        foreach (var item in vm.NavSections.SelectMany(s => s.Items))
-            _ = LoadNavIconAsync(item);
-
-        static async Task LoadNavIconAsync(NavItem item) =>
-            item.ShellIcon = await ShellIcons.LoadAsync(item.Path, ShellIcons.SmallSize);
+        MainViewModel.NavIconSource = path => ShellIcons.LoadAsync(path, ShellIcons.SmallSize);
+        vm.LoadNavIcons();
     }
 }

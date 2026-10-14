@@ -171,6 +171,8 @@ public partial class TabViewModel : ViewModelBase, IDisposable
             if (dir.Exists && await NavigateAsync(dir.FullName))
                 return;
         }
+        // The whole drive is gone (e.g. a USB stick was unplugged): fall back to the home folder.
+        await NavigateAsync(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
     }
 
     /// <summary>Re-reads the folder after "show hidden files" changes, or just re-sorts for "folders first".</summary>

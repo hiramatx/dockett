@@ -20,7 +20,10 @@ public static class FileSystemService
         return dir.EnumerateFileSystemInfos("*", options).Select(FileItem.FromInfo).ToList();
     }
 
-    public static IReadOnlyList<NavSection> BuildNavSections()
+    /// <summary>Quick access folders (Home, Desktop…) and the current drives.</summary>
+    public static IReadOnlyList<NavSection> BuildNavSections() => [BuildQuickAccess(), .. BuildDriveSections()];
+
+    public static NavSection BuildQuickAccess()
     {
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var quick = new List<NavItem>
@@ -32,7 +35,12 @@ public static class FileSystemService
             new() { Label = "Pictures", Path = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), Icon = NavIcon.Pictures },
         };
         quick.RemoveAll(i => string.IsNullOrEmpty(i.Path) || !Directory.Exists(i.Path));
+        return new NavSection { Title = "Quick access", Items = quick };
+    }
 
+    /// <summary>"This PC" (local and removable drives) and, when there are any, "Network". Can be slow for network drives.</summary>
+    public static IReadOnlyList<NavSection> BuildDriveSections()
+    {
         var local = new List<NavItem>();
         var network = new List<NavItem>();
         foreach (var drive in DriveInfo.GetDrives())
@@ -65,11 +73,7 @@ public static class FileSystemService
             (drive.DriveType == DriveType.Network ? network : local).Add(item);
         }
 
-        var sections = new List<NavSection>
-        {
-            new() { Title = "Quick access", Items = quick },
-            new() { Title = "This PC", Items = local },
-        };
+        var sections = new List<NavSection> { new() { Title = "This PC", Items = local } };
         if (network.Count > 0)
             sections.Add(new NavSection { Title = "Network", Items = network });
         return sections;

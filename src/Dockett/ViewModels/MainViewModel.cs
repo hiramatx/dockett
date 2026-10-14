@@ -1,4 +1,6 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dockett.Models;
@@ -25,7 +27,7 @@ public partial class MainViewModel : ViewModelBase
 
         Left = RestorePane("Left", session?.Left, valid.ElementAtOrDefault(0) ?? home, Settings);
         Right = RestorePane("Right", session?.Right, valid.ElementAtOrDefault(1) ?? systemRoot, Settings);
-        NavSections = FileSystemService.BuildNavSections();
+        NavSections = new ObservableCollection<NavSection>(FileSystemService.BuildNavSections());
 
         foreach (var pane in new[] { Left, Right })
         {
@@ -87,7 +89,75 @@ public partial class MainViewModel : ViewModelBase
 
     public PaneViewModel Left { get; }
     public PaneViewModel Right { get; }
-    public IReadOnlyList<NavSection> NavSections { get; }
+    /// <summary>Quick access first, then drive sections, which <see cref="RefreshDrivesAsync"/> replaces as drives come and go.</summary>
+    public ObservableCollection<NavSection> NavSections { get; }
+
+    /// <summary>Loads a shell icon for a navigation entry; set by the app. Unset means shape icons only.</summary>
+    public static Func<string, Task<Bitmap?>>? NavIconSource { get; set; }
+
+    bool _refreshingDrives;
+
+    /// <summary>Fills in Windows icons for navigation entries that don't have one yet.</summary>
+    public void LoadNavIcons()
+    {
+        if (NavIconSource is not { } source) return;
+        foreach (var item in NavSections.SelectMany(s => s.Items).Where(i => i.ShellIcon is null))
+            _ = LoadAsync(item);
+
+        async Task LoadAsync(NavItem item) => item.ShellIcon = await source(item.Path);
+    }
+
+    /// <summary>Re-reads the drive list in the background and applies it if anything changed.</summary>
+    public async Task RefreshDrivesAsync()
+    {
+        if (_refreshingDrives) return; // a slow network drive can make this take a while; don't pile up
+        _refreshingDrives = true;
+        try
+        {
+            ApplyDriveSections(await Task.Run(FileSystemService.BuildDriveSections));
+        }
+        finally
+        {
+            _refreshingDrives = false;
+        }
+    }
+
+    /// <summary>
+    /// Replaces the drive sections of the navigation pane, announces drives that appeared or went away,
+    /// and moves tabs off drives that are gone.
+    /// </summary>
+    public void ApplyDriveSections(IReadOnlyList<NavSection> fresh)
+    {
+        var oldItems = NavSections.Skip(1).SelectMany(s => s.Items).ToList();
+        var newItems = fresh.SelectMany(s => s.Items).ToList();
+        static string Signature(IEnumerable<NavSection> sections) =>
+            string.Join("|", sections.SelectMany(s => s.Items.Select(i => $"{s.Title}:{i.Path}:{i.Label}:{i.Detail}")));
+        if (Signature(NavSections.Skip(1)) == Signature(fresh)) return; // nothing to update; avoid flicker
+
+        // Keep icons for drives that are still there under the same name.
+        foreach (var item in newItems)
+        {
+            if (oldItems.FirstOrDefault(o => o.Path == item.Path && o.Label == item.Label)?.ShellIcon is { } icon)
+                item.ShellIcon = icon;
+        }
+        while (NavSections.Count > 1)
+            NavSections.RemoveAt(NavSections.Count - 1);
+        foreach (var section in fresh)
+            NavSections.Add(section);
+        LoadNavIcons();
+
+        var added = newItems.Where(n => oldItems.All(o => !SameFolder(o.Path, n.Path))).ToList();
+        var removed = oldItems.Where(o => newItems.All(n => !SameFolder(o.Path, n.Path))).ToList();
+        if (added.Count + removed.Count == 0) return; // only free space or labels changed
+
+        StatusMessage = string.Join(" · ",
+            added.Select(d => $"{d.Label} connected").Concat(removed.Select(d => $"{d.Label} removed")));
+        foreach (var tab in Left.Tabs.Concat(Right.Tabs))
+        {
+            if (removed.Any(d => tab.CurrentPath.StartsWith(d.Path, StringComparison.OrdinalIgnoreCase)))
+                _ = tab.RefreshAsync(); // the folder is gone, so this moves the tab somewhere that exists
+        }
+    }
     public PreviewViewModel Preview { get; } = new();
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ActiveTab), nameof(InactivePane))]
