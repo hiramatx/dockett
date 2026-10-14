@@ -26,6 +26,17 @@ To build a portable copy that runs on any 64-bit Windows 10 or 11 PC without ins
 
 This creates `artifacts/Dockett-<version>-win-x64-portable.zip` containing a single self-contained `Dockett.exe`. Add `-Runtime win-x64, win-arm64` to also build for Arm PCs. The zip includes a `Dockett.portable` marker file: while it sits next to the exe, settings, tabs, and layout are saved in a `Data` folder beside it, so Dockett can live on a USB stick and leave nothing behind. Delete the marker to use `%APPDATA%\Dockett` instead.
 
+### Releases
+
+Pushing a version tag builds the portable zips for x64 and Arm64 on GitHub Actions, runs the tests, and publishes a GitHub Release with the zips and SHA-256 checksums:
+
+```
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Tags with a suffix, like `v0.3.0-beta.1`, are published as prereleases. To try the build without releasing, use **Run workflow** on the Release workflow in the Actions tab; the zips are attached to that run.
+
 ## Build and run
 
 Requires the .NET 10 SDK on Windows.

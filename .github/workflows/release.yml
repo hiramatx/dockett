@@ -1,0 +1,78 @@
+# Builds the portable zips and publishes a GitHub Release when a version tag is pushed:
+#   git tag v0.2.0
+#   git push origin v0.2.0
+# "Run workflow" in the Actions tab does a dry run: same build, zips attached to the run, no release.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # create the release and upload its files
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Work out the version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          } else {
+            $version = ([xml](Get-Content src/Dockett/Dockett.csproj)).Project.PropertyGroup.Version |
+              Where-Object { $_ } | Select-Object -First 1
+            $version = "$version-dev.$env:GITHUB_RUN_NUMBER"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Building Dockett $version"
+
+      - name: Test
+        run: dotnet test --configuration Release
+
+      - name: Build portable zips
+        shell: pwsh
+        run: ./build/publish-portable.ps1 -Runtime win-x64, win-arm64 -Version ${{ steps.version.outputs.version }}
+
+      - name: Write checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts/*.zip | ForEach-Object {
+            "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          } | Set-Content -Encoding ascii artifacts/SHA256SUMS.txt
+          Get-Content artifacts/SHA256SUMS.txt
+
+      - name: Attach zips to this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: dockett-${{ steps.version.outputs.version }}
+          path: |
+            artifacts/*.zip
+            artifacts/SHA256SUMS.txt
+
+      - name: Publish the GitHub Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = @"
+          Portable Dockett for Windows 10 and 11. Download the zip for your PC (most PCs: **win-x64**; Arm laptops: **win-arm64**), extract it anywhere, and run ``Dockett.exe``. Nothing needs to be installed.
+
+          The app isn't code-signed yet, so Windows may show a SmartScreen warning the first time: choose **More info**, then **Run anyway**.
+          "@
+          $version = '${{ steps.version.outputs.version }}'
+          $files = @(Get-ChildItem artifacts/*.zip | ForEach-Object FullName) + 'artifacts/SHA256SUMS.txt'
+          $arguments = @($env:GITHUB_REF_NAME) + $files + @('--title', "Dockett $version", '--notes', $notes, '--generate-notes')
+          if ($version -match '-') { $arguments += '--prerelease' } # e.g. v0.2.0-beta.1
+          gh release create @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }

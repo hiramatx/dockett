@@ -10,17 +10,27 @@
 .EXAMPLE
     ./build/publish-portable.ps1
     ./build/publish-portable.ps1 -Runtime win-x64, win-arm64
+    ./build/publish-portable.ps1 -Version 0.2.0   # what the release workflow does with the tag's version
 #>
 param(
     [string[]] $Runtime = @('win-x64'),
-    [string] $Configuration = 'Release'
+    [string] $Configuration = 'Release',
+    # Defaults to <Version> in Dockett.csproj.
+    [string] $Version
 )
 
 $ErrorActionPreference = 'Stop'
+# Accept "win-x64,win-arm64" too, which is what -Runtime receives when called through pwsh -File.
+$Runtime = $Runtime -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root 'src\Dockett\Dockett.csproj'
 $artifacts = Join-Path $root 'artifacts'
-$version = ([xml](Get-Content $project)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+$version = if ($Version) { $Version } else {
+    ([xml](Get-Content $project)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+}
+
+# Start clean so artifacts\ holds only this build's zips (the release workflow uploads *.zip).
+Get-ChildItem $artifacts -Filter *.zip -ErrorAction SilentlyContinue | Remove-Item -Force
 
 foreach ($rid in $Runtime) {
     $out = Join-Path $artifacts "portable\$rid"
@@ -37,6 +47,7 @@ foreach ($rid in $Runtime) {
         -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:EnableCompressionInSingleFile=true `
         -p:DebugType=none `
+        -p:Version=$version `
         -p:GenerateDocumentationFile=false
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for $rid" }
 
