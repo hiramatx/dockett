@@ -12,16 +12,19 @@ public partial class MainViewModel : ViewModelBase
 
     /// <param name="startPaths">Optional folders for the left and right panes, e.g. from the command line. These win over the session.</param>
     /// <param name="session">The previous session to restore, if any.</param>
-    public MainViewModel(IReadOnlyList<string>? startPaths = null, SessionState? session = null)
+    /// <param name="settings">Live preferences; defaults when null (e.g. in tests).</param>
+    public MainViewModel(IReadOnlyList<string>? startPaths = null, SessionState? session = null, SettingsViewModel? settings = null)
     {
+        Settings = settings ?? new SettingsViewModel();
+        Settings.PropertyChanged += OnSettingsChanged;
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var systemRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? home;
         var valid = (startPaths ?? []).Where(Directory.Exists).Select(Path.GetFullPath).ToList();
         if (valid.Count > 0)
             session = session is null ? null : session with { Left = null, Right = null, RightPaneActive = false };
 
-        Left = RestorePane("Left", session?.Left, valid.ElementAtOrDefault(0) ?? home);
-        Right = RestorePane("Right", session?.Right, valid.ElementAtOrDefault(1) ?? systemRoot);
+        Left = RestorePane("Left", session?.Left, valid.ElementAtOrDefault(0) ?? home, Settings);
+        Right = RestorePane("Right", session?.Right, valid.ElementAtOrDefault(1) ?? systemRoot, Settings);
         NavSections = FileSystemService.BuildNavSections();
 
         foreach (var pane in new[] { Left, Right })
@@ -39,7 +42,7 @@ public partial class MainViewModel : ViewModelBase
     /// Rebuilds a pane from its saved tabs. A tab whose folder is gone opens the nearest folder above it that
     /// still exists; tabs on drives that are gone are dropped. With nothing left, the pane opens <paramref name="fallback"/>.
     /// </summary>
-    static PaneViewModel RestorePane(string name, PaneState? saved, string fallback)
+    static PaneViewModel RestorePane(string name, PaneState? saved, string fallback, SettingsViewModel settings)
     {
         var tabs = new List<TabState>();
         var selected = 0;
@@ -53,8 +56,8 @@ public partial class MainViewModel : ViewModelBase
             }
         }
         return tabs.Count > 0
-            ? new PaneViewModel(name, tabs, selected)
-            : new PaneViewModel(name, [fallback]);
+            ? new PaneViewModel(name, tabs, selected, settings)
+            : new PaneViewModel(name, [fallback], settings);
     }
 
     /// <summary>The panes, tabs, and preview state to save; the window adds its own placement.</summary>
@@ -68,6 +71,19 @@ public partial class MainViewModel : ViewModelBase
 
     /// <summary>Set by the window once it exists.</summary>
     public IUiHost? Host { get; set; }
+
+    public SettingsViewModel Settings { get; }
+
+    [RelayCommand]
+    Task OpenSettings() => Host?.ShowSettingsAsync(Settings) ?? Task.CompletedTask;
+
+    async void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        // Hidden files need a fresh listing; folder order only needs a re-sort.
+        var reload = e.PropertyName == nameof(SettingsViewModel.ShowHidden);
+        if (!reload && e.PropertyName != nameof(SettingsViewModel.FoldersFirst)) return;
+        await Task.WhenAll(Left.Tabs.Concat(Right.Tabs).Select(t => t.ApplySettingsAsync(reload)));
+    }
 
     public PaneViewModel Left { get; }
     public PaneViewModel Right { get; }
@@ -253,7 +269,8 @@ public partial class MainViewModel : ViewModelBase
             await Alert("Can't move here", "Both panes show the same folder. Open a different folder in the other pane first.");
             return;
         }
-        if (!await Host.ConfirmAsync($"{verb} {Describe(items)}", $"{verb} {Describe(items)} to\n{target.CurrentPath}", verb))
+        if (Settings.ConfirmTransfers
+            && !await Host.ConfirmAsync($"{verb} {Describe(items)}", $"{verb} {Describe(items)} to\n{target.CurrentPath}", verb))
             return;
 
         var ok = await RunTool(() => move
@@ -324,7 +341,8 @@ public partial class MainViewModel : ViewModelBase
         var items = tab.TargetItems;
         if (items.Count == 0 || Host is null) return;
 
-        if (!await Host.ConfirmAsync("Move to Recycle Bin", $"Move {Describe(items)} to the Recycle Bin?", "Delete", destructive: true))
+        if (Settings.ConfirmDelete
+            && !await Host.ConfirmAsync("Move to Recycle Bin", $"Move {Describe(items)} to the Recycle Bin?", "Delete", destructive: true))
             return;
 
         // Keep the cursor near where the deleted rows were.

@@ -13,7 +13,8 @@ A dual pane file manager for Windows, built with C# and [Avalonia UI](https://av
 - Right-click menu with open in new tab or other pane, Open with, cut/copy/paste (works with Explorer's clipboard), copy path, Open in Terminal, and Show in Explorer. "Show more options" (or Shift+right-click) opens the full Windows menu with shell extensions like 7-Zip and Send to
 - Copy, move, rename and delete go through the Windows shell, so you get the native progress and conflict dialogs and Explorer's Undo
 - Remembers your tabs, their sort order, the active pane, the preview panel, and the window size, position, and panel widths between sessions (saved in `%APPDATA%\Dockett\session.json`). Folders that no longer exist reopen at the nearest parent that does
-- Light and dark themes follow Windows
+- Settings page (gear in the title bar, or Ctrl+,): theme, show hidden and system files, folders before files, confirmations for copy/move and delete, and restoring tabs on startup. Saved in `%APPDATA%\Dockett\settings.json`
+- Light and dark themes follow Windows, or pick one in Settings
 
 ## Build and run
 
@@ -51,6 +52,7 @@ Run the tests with `dotnet test`. Clipboard tests are skipped by default because
 | Ctrl+X / Ctrl+C / Ctrl+V | Cut / copy / paste files |
 | Ctrl+Shift+C | Copy path |
 | Ctrl+R | Refresh |
+| Ctrl+, | Settings |
 
 ## Project layout
 

@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
 using Dockett.Models;
 using Dockett.Services;
 using Dockett.ViewModels;
@@ -19,8 +20,19 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            var settings = new SettingsViewModel(SettingsStore.Load());
+            ApplyTheme(settings.Theme);
+            settings.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(SettingsViewModel.Theme))
+                    ApplyTheme(settings.Theme);
+                SettingsStore.Save(settings.ToModel());
+            };
+
             var session = SessionStore.Load();
-            var vm = new MainViewModel(desktop.Args, session);
+            if (!settings.RestoreSession)
+                session = null;
+            var vm = new MainViewModel(desktop.Args, session, settings);
             var window = new MainWindow { DataContext = vm };
             UseShellIcons(window, vm);
             window.ApplyPlacement(session?.Window);
@@ -32,6 +44,13 @@ public partial class App : Application
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    void ApplyTheme(ThemeChoice theme) => RequestedThemeVariant = theme switch
+    {
+        ThemeChoice.Light => ThemeVariant.Light,
+        ThemeChoice.Dark => ThemeVariant.Dark,
+        _ => ThemeVariant.Default,
+    };
 
     /// <summary>Turns on real Windows icons, sized for the primary screen's scaling.</summary>
     static void UseShellIcons(MainWindow window, MainViewModel vm)

@@ -226,6 +226,7 @@ public partial class MainWindow : Window, IUiHost
             (Key.W, KeyModifiers.Control) => () => { _vm.CloseTabCommand.Execute(null); FocusActiveList(); },
             (Key.L, KeyModifiers.Control) or (Key.D, KeyModifiers.Alt) => () => _vm.BeginEditAddressCommand.Execute(null),
             (Key.F, KeyModifiers.Control) => () => SearchBox.Focus(),
+            (Key.OemComma, KeyModifiers.Control) => () => Run(_vm.OpenSettingsCommand),
             (Key.C, KeyModifiers.Control) => () => Run(_vm.CopyToClipboardCommand),
             (Key.X, KeyModifiers.Control) => () => Run(_vm.CutToClipboardCommand),
             (Key.V, KeyModifiers.Control) => () => Run(_vm.PasteCommand),
@@ -287,6 +288,13 @@ public partial class MainWindow : Window, IUiHost
         var dialog = new DialogWindow(title, message, confirmText, destructive: destructive);
         var result = await dialog.ShowDialog<string?>(this);
         return result is not null;
+    }
+
+    public async Task ShowSettingsAsync(SettingsViewModel settings)
+    {
+        var window = new SettingsWindow { DataContext = settings };
+        await window.ShowDialog(this);
+        FocusActiveList();
     }
 
     public async Task AlertAsync(string title, string message)

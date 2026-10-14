@@ -20,11 +20,19 @@
 
     <!-- Title bar: draggable; the system caption buttons sit over the right end. -->
     <Border Grid.Row="0" chrome:WindowDecorationProperties.ElementRole="TitleBar" Background="{DynamicResource Surface0}">
-      <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,0" VerticalAlignment="Center" IsHitTestVisible="False">
-        <Image Source="/Assets/dockett.png" Width="18" Height="18" />
-        <TextBlock Text="Dockett" FontWeight="SemiBold" VerticalAlignment="Center" />
-        <TextBlock Classes="muted" Text="{Binding ActiveTab.CurrentPath}" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="12" />
-      </StackPanel>
+      <Panel>
+        <!-- Sits just left of the system caption buttons; the User role keeps it clickable inside the drag area. -->
+        <Button Classes="flat icon" HorizontalAlignment="Right" Margin="0,0,146,0" Width="34" Height="30"
+                chrome:WindowDecorationProperties.ElementRole="User"
+                ToolTip.Tip="Settings (Ctrl+,)" Command="{Binding OpenSettingsCommand}">
+          <PathIcon Data="{StaticResource Icon.Settings}" />
+        </Button>
+        <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,0" VerticalAlignment="Center" IsHitTestVisible="False">
+          <Image Source="/Assets/dockett.png" Width="18" Height="18" />
+          <TextBlock Text="Dockett" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <TextBlock Classes="muted" Text="{Binding ActiveTab.CurrentPath}" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="12" />
+        </StackPanel>
+      </Panel>
     </Border>
 
     <!-- Toolbar: history, address bar, search -->

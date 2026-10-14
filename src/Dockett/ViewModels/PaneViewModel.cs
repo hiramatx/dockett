@@ -8,17 +8,20 @@ namespace Dockett.ViewModels;
 /// <summary>One side of the dual view: a strip of tabs, one of which is shown.</summary>
 public partial class PaneViewModel : ViewModelBase
 {
-    public PaneViewModel(string name, IEnumerable<string> startPaths)
-        : this(name, startPaths.Select(p => new TabState { Path = p }), 0)
+    readonly SettingsViewModel _settings;
+
+    public PaneViewModel(string name, IEnumerable<string> startPaths, SettingsViewModel? settings = null)
+        : this(name, startPaths.Select(p => new TabState { Path = p }), 0, settings)
     {
     }
 
     /// <summary>Creates the pane from saved tabs; <paramref name="tabs"/> must not be empty.</summary>
-    public PaneViewModel(string name, IEnumerable<TabState> tabs, int selectedIndex)
+    public PaneViewModel(string name, IEnumerable<TabState> tabs, int selectedIndex, SettingsViewModel? settings = null)
     {
         Name = name;
+        _settings = settings ?? new SettingsViewModel();
         foreach (var tab in tabs)
-            Tabs.Add(new TabViewModel(tab.Path, tab.SortBy, tab.SortAscending));
+            Tabs.Add(new TabViewModel(tab.Path, tab.SortBy, tab.SortAscending, _settings));
         SelectedTab = Tabs[Math.Clamp(selectedIndex, 0, Tabs.Count - 1)];
         Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(CanCloseTabs));
     }
@@ -62,7 +65,7 @@ public partial class PaneViewModel : ViewModelBase
     /// <summary>Opens <paramref name="path"/> in a new tab next to the current one.</summary>
     public async Task OpenTabAsync(string path)
     {
-        var tab = new TabViewModel(path);
+        var tab = new TabViewModel(path, SelectedTab.SortBy, SelectedTab.SortAscending, _settings);
         Tabs.Insert(Tabs.IndexOf(SelectedTab) + 1, tab);
         SelectedTab = tab;
         RequestActivation();

@@ -82,7 +82,7 @@
                  ContextRequested="OnContextRequested">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="m:FileItem">
-              <Grid ColumnDefinitions="*,80,132" Background="Transparent" Classes.cut="{Binding IsCut}">
+              <Grid ColumnDefinitions="*,80,132" Background="Transparent" Classes.cut="{Binding IsCut}" Classes.hidden="{Binding IsHidden}">
                 <Border Width="3" CornerRadius="2" Margin="-9,4,0,4" HorizontalAlignment="Left"
                         Background="{DynamicResource Warning}" IsVisible="{Binding IsDifferent}"
                         ToolTip.Tip="Missing from or different in the other pane" />

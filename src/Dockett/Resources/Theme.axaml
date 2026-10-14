@@ -44,6 +44,13 @@
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 
+  <!-- Fluent controls use the whole accent range (e.g. checked radio buttons), not just the base color. -->
   <Color x:Key="SystemAccentColor">#1F6FEB</Color>
+  <Color x:Key="SystemAccentColorLight1">#4C8DF6</Color>
+  <Color x:Key="SystemAccentColorLight2">#7AAAF8</Color>
+  <Color x:Key="SystemAccentColorLight3">#A8C7FA</Color>
+  <Color x:Key="SystemAccentColorDark1">#1A5FCC</Color>
+  <Color x:Key="SystemAccentColorDark2">#154EA8</Color>
+  <Color x:Key="SystemAccentColorDark3">#103C82</Color>
   <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas, monospace</FontFamily>
 </ResourceDictionary>

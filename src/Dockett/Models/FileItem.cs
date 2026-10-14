@@ -38,6 +38,9 @@ public partial class FileItem : ObservableObject
     [ObservableProperty]
     public partial bool IsCut { get; set; }
 
+    /// <summary>Hidden or system items, shown faded when "show hidden files" is on.</summary>
+    public bool IsHidden => (Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0;
+
     public string SizeText => IsDirectory ? "" : Format.Size(Size);
     public string ModifiedText => Modified.ToString("yyyy-MM-dd  HH:mm");
     public string TypeText => IsDirectory ? "Folder" : FileTypes.Describe(Path.GetExtension(Name));

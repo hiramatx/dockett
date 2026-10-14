@@ -1,0 +1,140 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Dockett.ViewModels"
+        x:Class="Dockett.Views.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="Settings"
+        Width="560" Height="680" MinWidth="460" MinHeight="400"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" CanMinimize="False"
+        Icon="/Assets/dockett.ico"
+        Background="{DynamicResource Surface1}">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.group">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="{DynamicResource TextMuted}" />
+      <Setter Property="Margin" Value="4,20,0,8" />
+    </Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource Surface2}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+    </Style>
+    <Style Selector="DockPanel.row">
+      <Setter Property="Margin" Value="16,12" />
+    </Style>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    <Style Selector="TextBlock.description">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondary}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,2,16,0" />
+    </Style>
+    <Style Selector="ToggleSwitch">
+      <Setter Property="OnContent" Value="" />
+      <Setter Property="OffContent" Value="" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Rectangle.divider">
+      <Setter Property="Height" Value="1" />
+      <Setter Property="Fill" Value="{DynamicResource Line}" />
+      <Setter Property="Margin" Value="16,0" />
+    </Style>
+  </Window.Styles>
+
+  <ScrollViewer>
+    <StackPanel Margin="24,12,24,24">
+      <TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold" Margin="4,8,0,0" />
+      <TextBlock Classes="description" Margin="4,4,0,0" Text="Changes apply right away." />
+
+      <TextBlock Classes="group" Text="Appearance" />
+      <Border Classes="card">
+        <DockPanel Classes="row">
+          <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+            <RadioButton GroupName="theme" Content="System" IsChecked="{Binding IsSystemTheme}" />
+            <RadioButton GroupName="theme" Content="Light" IsChecked="{Binding IsLightTheme}" />
+            <RadioButton GroupName="theme" Content="Dark" IsChecked="{Binding IsDarkTheme}" />
+          </StackPanel>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Classes="title" Text="Theme" />
+            <TextBlock Classes="description" Text="System follows your Windows setting." />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <TextBlock Classes="group" Text="Files and folders" />
+      <Border Classes="card">
+        <StackPanel>
+          <DockPanel Classes="row">
+            <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding ShowHidden}" />
+            <StackPanel>
+              <TextBlock Classes="title" Text="Show hidden and system files" />
+              <TextBlock Classes="description" Text="They appear faded, like in Explorer." />
+            </StackPanel>
+          </DockPanel>
+          <Rectangle Classes="divider" />
+          <DockPanel Classes="row">
+            <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding FoldersFirst}" />
+            <StackPanel>
+              <TextBlock Classes="title" Text="Show folders before files" />
+              <TextBlock Classes="description" Text="Turn off to sort folders and files together." />
+            </StackPanel>
+          </DockPanel>
+        </StackPanel>
+      </Border>
+
+      <TextBlock Classes="group" Text="Confirmations" />
+      <Border Classes="card">
+        <StackPanel>
+          <DockPanel Classes="row">
+            <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding ConfirmTransfers}" />
+            <StackPanel>
+              <TextBlock Classes="title" Text="Ask before copying or moving" />
+              <TextBlock Classes="description" Text="For Copy and Move to the other pane (F5 and F6). Drag and drop never asks." />
+            </StackPanel>
+          </DockPanel>
+          <Rectangle Classes="divider" />
+          <DockPanel Classes="row">
+            <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding ConfirmDelete}" />
+            <StackPanel>
+              <TextBlock Classes="title" Text="Ask before deleting" />
+              <TextBlock Classes="description" Text="Deleted items always go to the Recycle Bin." />
+            </StackPanel>
+          </DockPanel>
+        </StackPanel>
+      </Border>
+
+      <TextBlock Classes="group" Text="Startup" />
+      <Border Classes="card">
+        <DockPanel Classes="row">
+          <ToggleSwitch DockPanel.Dock="Right" IsChecked="{Binding RestoreSession}" />
+          <StackPanel>
+            <TextBlock Classes="title" Text="Restore tabs and layout" />
+            <TextBlock Classes="description" Text="Reopen your tabs, window size, and panel widths from last time." />
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <TextBlock Classes="group" Text="About" />
+      <Border Classes="card">
+        <DockPanel Classes="row">
+          <Image DockPanel.Dock="Left" Source="/Assets/dockett.png" Width="36" Height="36" Margin="0,0,12,0" VerticalAlignment="Top" />
+          <StackPanel Spacing="10">
+            <StackPanel>
+              <TextBlock Classes="title" Text="Dockett" />
+              <TextBlock Classes="description" Text="{Binding Version, StringFormat='Version {0}'}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Open settings folder" Click="OnOpenSettingsFolder" />
+              <Button Content="View on GitHub" Click="OnOpenGitHub" />
+            </StackPanel>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

@@ -11,4 +11,6 @@ public interface IUiHost
     Task<bool> ConfirmAsync(string title, string message, string confirmText, bool destructive = false);
 
     Task AlertAsync(string title, string message);
+
+    Task ShowSettingsAsync(ViewModels.SettingsViewModel settings);
 }

@@ -27,8 +27,11 @@ public partial class TabViewModel : ViewModelBase, IDisposable
     bool _suppressFilterView;
     bool _disposed;
 
-    public TabViewModel(string path, SortColumn sortBy = SortColumn.Name, bool sortAscending = true)
+    readonly SettingsViewModel _settings;
+
+    public TabViewModel(string path, SortColumn sortBy = SortColumn.Name, bool sortAscending = true, SettingsViewModel? settings = null)
     {
+        _settings = settings ?? new SettingsViewModel();
         SortBy = sortBy;
         SortAscending = sortAscending;
         _ui = SynchronizationContext.Current;
@@ -170,6 +173,15 @@ public partial class TabViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>Re-reads the folder after "show hidden files" changes, or just re-sorts for "folders first".</summary>
+    public Task ApplySettingsAsync(bool reload)
+    {
+        if (reload)
+            return RefreshAsync();
+        MergeRefresh(new List<FileItem>(_all), null);
+        return Task.CompletedTask;
+    }
+
     public void Dispose()
     {
         _disposed = true;
@@ -202,7 +214,7 @@ public partial class TabViewModel : ViewModelBase, IDisposable
         IsLoading = true;
         try
         {
-            var showHidden = false;
+            var showHidden = _settings.ShowHidden;
             var items = await Task.Run(() => FileSystemService.List(path, showHidden));
             if (version != _loadVersion) return false; // a newer navigation won
 
@@ -370,12 +382,15 @@ public partial class TabViewModel : ViewModelBase, IDisposable
             SortColumn.Modified => i => i.Modified,
             _ => i => i.Name,
         };
+        var comparer = Comparer<IComparable>.Create((a, b) =>
+            a is string sa && b is string sb ? StringComparer.CurrentCultureIgnoreCase.Compare(sa, sb) : a.CompareTo(b));
+        if (!_settings.FoldersFirst)
+            return (SortAscending ? view.OrderBy(key, comparer) : view.OrderByDescending(key, comparer)).ToList();
+
         var folders = view.Where(i => i.IsDirectory);
         var files = view.Where(i => !i.IsDirectory);
         // Folders sort by name when sorting by size, since they have no size.
         var folderKey = SortBy == SortColumn.Size ? (i => i.Name) : key;
-        var comparer = Comparer<IComparable>.Create((a, b) =>
-            a is string sa && b is string sb ? StringComparer.CurrentCultureIgnoreCase.Compare(sa, sb) : a.CompareTo(b));
         var sorted = SortAscending
             ? folders.OrderBy(folderKey, comparer).Concat(files.OrderBy(key, comparer))
             : folders.OrderByDescending(folderKey, comparer).Concat(files.OrderByDescending(key, comparer));

@@ -168,6 +168,9 @@
   <Style Selector="ListBox.files ListBoxItem:selected TextBlock.name">
     <Setter Property="Foreground" Value="{DynamicResource AccentText}" />
   </Style>
+  <Style Selector="Grid.hidden">
+    <Setter Property="Opacity" Value="0.55" />
+  </Style>
   <Style Selector="Grid.cut">
     <Setter Property="Opacity" Value="0.5" />
   </Style>

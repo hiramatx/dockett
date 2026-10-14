@@ -21,6 +21,7 @@ public class ClipboardTests
         public Task<string?> PromptAsync(string title, string message, string initialText, bool selectStem = false) => Task.FromResult<string?>(initialText);
         public Task<bool> ConfirmAsync(string title, string message, string confirmText, bool destructive = false) => Task.FromResult(true);
         public Task AlertAsync(string title, string message) => throw new InvalidOperationException($"{title}: {message}");
+        public Task ShowSettingsAsync(SettingsViewModel settings) => Task.CompletedTask;
     }
 
     [ClipboardFact]
