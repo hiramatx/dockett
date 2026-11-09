@@ -18,6 +18,8 @@ public partial class MainWindow : Window, IUiHost
 
     // Last position and size while not maximized, so a maximized window restores to sensible bounds.
     PixelPoint _normalPosition;
+
+    const double MaxSavedSize = 16384, MaxSavedPanel = 1200;
     Size _normalSize;
 
     public MainWindow()
@@ -55,7 +57,8 @@ public partial class MainWindow : Window, IUiHost
     {
         if (placement is null) return;
 
-        if (placement.Width >= MinWidth && placement.Height >= MinHeight)
+        // Saved values are only trusted within sane ranges; the file can be edited or damaged.
+        if (placement.Width >= MinWidth && placement.Height >= MinHeight && placement.Width <= MaxSavedSize && placement.Height <= MaxSavedSize)
         {
             Width = placement.Width;
             Height = placement.Height;
@@ -74,14 +77,14 @@ public partial class MainWindow : Window, IUiHost
             WindowState = WindowState.Maximized;
 
         var columns = MainGrid.ColumnDefinitions;
-        if (placement.NavWidth >= 80)
+        if (placement.NavWidth is >= 80 and <= MaxSavedPanel)
             columns[0].Width = new GridLength(placement.NavWidth);
-        if (placement.PreviewWidth >= 80)
+        if (placement.PreviewWidth is >= 80 and <= MaxSavedPanel)
         {
             _previewWidth = new GridLength(placement.PreviewWidth);
             ApplyPreviewVisibility();
         }
-        var share = Math.Clamp(placement.LeftShare, 0.1, 0.9);
+        var share = double.IsFinite(placement.LeftShare) ? Math.Clamp(placement.LeftShare, 0.1, 0.9) : 0.5;
         columns[2].Width = new GridLength(share, GridUnitType.Star);
         columns[4].Width = new GridLength(1 - share, GridUnitType.Star);
     }

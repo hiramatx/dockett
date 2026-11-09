@@ -44,17 +44,23 @@ public partial class MainViewModel : ViewModelBase
     /// Rebuilds a pane from its saved tabs. A tab whose folder is gone opens the nearest folder above it that
     /// still exists; tabs on drives that are gone are dropped. With nothing left, the pane opens <paramref name="fallback"/>.
     /// </summary>
+    const int MaxRestoredTabs = 50;
+
     static PaneViewModel RestorePane(string name, PaneState? saved, string fallback, SettingsViewModel settings)
     {
         var tabs = new List<TabState>();
         var selected = 0;
         if (saved is not null)
         {
-            for (var i = 0; i < saved.Tabs.Count; i++)
+            // The file may have been edited by hand or damaged: tolerate missing lists and entries,
+            // and don't open an absurd number of tabs.
+            var savedTabs = saved.Tabs ?? [];
+            for (var i = 0; i < savedTabs.Count && tabs.Count < MaxRestoredTabs; i++)
             {
-                if (SessionStore.NearestExisting(saved.Tabs[i].Path) is not { } path) continue;
+                if (savedTabs[i]?.Path is not { Length: > 0 } savedPath) continue;
+                if (SessionStore.NearestExisting(savedPath) is not { } path) continue;
                 if (i == saved.SelectedIndex) selected = tabs.Count;
-                tabs.Add(saved.Tabs[i] with { Path = path });
+                tabs.Add(savedTabs[i] with { Path = path });
             }
         }
         return tabs.Count > 0
@@ -84,7 +90,15 @@ public partial class MainViewModel : ViewModelBase
         // Hidden files need a fresh listing; folder order only needs a re-sort.
         var reload = e.PropertyName == nameof(SettingsViewModel.ShowHidden);
         if (!reload && e.PropertyName != nameof(SettingsViewModel.FoldersFirst)) return;
-        await Task.WhenAll(Left.Tabs.Concat(Right.Tabs).Select(t => t.ApplySettingsAsync(reload)));
+        try
+        {
+            await Task.WhenAll(Left.Tabs.Concat(Right.Tabs).Select(t => t.ApplySettingsAsync(reload)));
+        }
+        catch (Exception ex)
+        {
+            // An async void handler has nowhere to throw to; a failed refresh must not end the app.
+            StatusMessage = $"Couldn't refresh: {ex.Message}";
+        }
     }
 
     public PaneViewModel Left { get; }
@@ -358,17 +372,17 @@ public partial class MainViewModel : ViewModelBase
         var item = tab.TargetItems.FirstOrDefault();
         if (item is null || Host is null) return;
 
-        var name = await Host.PromptAsync("Rename", $"New name for “{item.Name}”", item.Name, selectStem: !item.IsDirectory);
-        if (string.IsNullOrWhiteSpace(name) || name == item.Name) return;
+        var name = (await Host.PromptAsync("Rename", $"New name for “{item.Name}”", item.Name, selectStem: !item.IsDirectory))?.Trim();
+        if (string.IsNullOrEmpty(name) || name == item.Name) return;
         if (!IsValidName(name))
         {
             await Alert("Can't use that name", "Names can't contain \\ / : * ? \" < > |");
             return;
         }
 
-        if (await RunTool(() => ShellOperations.RenameAsync(Host.OwnerHandle, item.FullPath, name.Trim())))
-            StatusMessage = $"Renamed to “{name.Trim()}”";
-        await RefreshFolders(tab.CurrentPath, null, selectInSource: name.Trim());
+        if (await RunTool(() => ShellOperations.RenameAsync(Host.OwnerHandle, item.FullPath, name)))
+            StatusMessage = $"Renamed to “{name}”";
+        await RefreshFolders(tab.CurrentPath, null, selectInSource: name);
     }
 
     [RelayCommand]
@@ -397,7 +411,7 @@ public partial class MainViewModel : ViewModelBase
             Directory.CreateDirectory(path);
             StatusMessage = $"Created “{name}”";
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             await Alert("Couldn't create folder", e.Message);
         }
@@ -437,6 +451,12 @@ public partial class MainViewModel : ViewModelBase
         name = name.Trim();
         if (!name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             name += ".zip";
+        // Without this check a name like "..\..\x.zip" would write outside the folder.
+        if (!IsValidName(name))
+        {
+            await Alert("Can't use that name", "Names can't contain \\ / : * ? \" < > |");
+            return;
+        }
         var zipPath = Path.Combine(tab.CurrentPath, name);
         if (File.Exists(zipPath))
         {
@@ -450,7 +470,8 @@ public partial class MainViewModel : ViewModelBase
             await ShellOperations.CompressAsync(Paths(items), zipPath);
             StatusMessage = $"Created “{name}”";
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException
+                                      or NotSupportedException or InvalidDataException)
         {
             StatusMessage = null;
             await Alert("Couldn't create zip", e.Message);
@@ -463,8 +484,8 @@ public partial class MainViewModel : ViewModelBase
     {
         var left = Left.SelectedTab.Items;
         var right = Right.SelectedTab.Items;
-        var rightByName = right.ToDictionary(i => i.Name, StringComparer.OrdinalIgnoreCase);
-        var leftByName = left.ToDictionary(i => i.Name, StringComparer.OrdinalIgnoreCase);
+        var rightByName = ByName(right);
+        var leftByName = ByName(left);
 
         var differences = 0;
         foreach (var item in left)
@@ -481,6 +502,15 @@ public partial class MainViewModel : ViewModelBase
         StatusMessage = differences == 0
             ? "Both folders have the same items"
             : $"{Format.Count(differences, "difference")} marked";
+
+        // Not ToDictionary: a case-sensitive folder (WSL, some network shares) can hold both "File" and "file".
+        static Dictionary<string, FileItem> ByName(IEnumerable<FileItem> items)
+        {
+            var map = new Dictionary<string, FileItem>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items)
+                map.TryAdd(item.Name, item);
+            return map;
+        }
 
         static bool Differs(FileItem a, FileItem b) =>
             a.IsDirectory != b.IsDirectory
@@ -709,6 +739,5 @@ public partial class MainViewModel : ViewModelBase
     static bool SameFolder(string a, string b) =>
         string.Equals(Path.TrimEndingDirectorySeparator(a), Path.TrimEndingDirectorySeparator(b), StringComparison.OrdinalIgnoreCase);
 
-    static bool IsValidName(string name) =>
-        name.Trim().Length > 0 && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && name.Trim() is not "." and not "..";
+    static bool IsValidName(string name) => ShellOperations.IsValidFileName(name);
 }

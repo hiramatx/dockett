@@ -9,14 +9,25 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# Read-only by default; the release job below asks for the one extra permission it needs.
 permissions:
-  contents: write # create the release and upload its files
+  contents: read
+
+# Two runs for the same tag would race to create the same release.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # create the release and upload its files
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false # nothing after checkout needs git to hold the token
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -33,6 +44,10 @@ jobs:
               Where-Object { $_ } | Select-Object -First 1
             $version = "$version-dev.$env:GITHUB_RUN_NUMBER"
           }
+          # The version ends up in file names and command lines, so only accept a plain version number.
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$') {
+            throw "'$version' is not a version like 1.2.3 or 1.2.3-beta.1"
+          }
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Host "Building Dockett $version"
 
@@ -41,7 +56,9 @@ jobs:
 
       - name: Build portable zips
         shell: pwsh
-        run: ./build/publish-portable.ps1 -Runtime win-x64, win-arm64 -Version ${{ steps.version.outputs.version }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: ./build/publish-portable.ps1 -Runtime win-x64, win-arm64 -Version $env:VERSION
 
       - name: Write checksums
         shell: pwsh
@@ -66,13 +83,14 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           $notes = @"
           Portable Dockett for Windows 10 and 11. Download the zip for your PC (most PCs: **win-x64**; Arm laptops: **win-arm64**), extract it anywhere, and run ``Dockett.exe``. Nothing needs to be installed.
 
           The app isn't code-signed yet, so Windows may show a SmartScreen warning the first time: choose **More info**, then **Run anyway**.
           "@
-          $version = '${{ steps.version.outputs.version }}'
+          $version = $env:VERSION
           $files = @(Get-ChildItem artifacts/*.zip | ForEach-Object FullName) + 'artifacts/SHA256SUMS.txt'
           $arguments = @($env:GITHUB_REF_NAME) + $files + @('--title', "Dockett $version", '--notes', $notes, '--generate-notes')
           if ($version -match '-') { $arguments += '--prerelease' } # e.g. v0.2.0-beta.1

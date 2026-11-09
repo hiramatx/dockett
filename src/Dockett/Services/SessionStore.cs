@@ -16,6 +16,8 @@ public static class JsonFile
     /// <summary>Name of the marker file that makes Dockett keep its data next to the exe.</summary>
     public const string PortableMarker = "Dockett.portable";
 
+    const long MaxFileBytes = 4 * 1024 * 1024;
+
     public static string Folder { get; } = ChooseFolder(AppContext.BaseDirectory);
 
     /// <summary>True when settings live beside the exe (portable mode) rather than in %APPDATA%.</summary>
@@ -52,9 +54,13 @@ public static class JsonFile
     {
         try
         {
-            return File.Exists(path) ? JsonSerializer.Deserialize<T>(File.ReadAllText(path), Options) : null;
+            // These files are a few KB. Anything huge isn't ours, and isn't worth reading into memory.
+            var file = new FileInfo(path);
+            if (!file.Exists || file.Length > MaxFileBytes) return null;
+            return JsonSerializer.Deserialize<T>(File.ReadAllText(path), Options);
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or NotSupportedException
+                                      or ArgumentException or InvalidOperationException or System.Security.SecurityException)
         {
             return null;
         }
@@ -70,7 +76,8 @@ public static class JsonFile
             File.WriteAllText(temp, JsonSerializer.Serialize(value, Options));
             File.Move(temp, path, overwrite: true);
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException
+                                      or ArgumentException or System.Security.SecurityException)
         {
             // Failing to save preferences shouldn't break the app.
         }

@@ -11,6 +11,7 @@ public static class ShellContextMenu
     static IContextMenu2? _active2;
     static IContextMenu3? _active3;
     static nint _oldWndProc;
+    static bool _showing;
     static readonly WndProc HookProc = Hook; // kept alive for the lifetime of the app
 
     /// <param name="owner">The main window handle; menu messages are routed through it while the menu is open.</param>
@@ -18,7 +19,9 @@ public static class ShellContextMenu
     /// <param name="extended">Include extended verbs, like Explorer does on Shift+right-click.</param>
     public static void Show(nint owner, IReadOnlyList<string> paths, int screenX, int screenY, bool extended)
     {
-        if (paths.Count == 0 || owner == 0) return;
+        // One menu at a time: a second one would hook the window procedure again and lose the original.
+        if (paths.Count == 0 || owner == 0 || _showing) return;
+        _showing = true;
 
         var pidls = new List<nint>();
         IShellFolder? parent = null;
@@ -41,10 +44,12 @@ public static class ShellContextMenu
 
             var menuIid = typeof(IContextMenu).GUID;
             parent!.GetUIObjectOf(owner, (uint)children.Length, children, ref menuIid, 0, out var menuPtr);
+            if (menuPtr == 0) return;
             menu = (IContextMenu)Marshal.GetObjectForIUnknown(menuPtr);
             Marshal.Release(menuPtr);
 
             hmenu = CreatePopupMenu();
+            if (hmenu == 0) return;
             // No CMF_CANRENAME: renaming is a shell-view feature, so that item would do nothing here.
             var flags = CMF_NORMAL | CMF_EXPLORE | (extended ? CMF_EXTENDEDVERBS : 0);
             menu.QueryContextMenu(hmenu, 0, FirstCommand, LastCommand, flags);
@@ -85,6 +90,7 @@ public static class ShellContextMenu
         }
         finally
         {
+            _showing = false;
             if (hmenu != 0) DestroyMenu(hmenu);
             if (menu is not null) Marshal.ReleaseComObject(menu);
             if (parent is not null) Marshal.ReleaseComObject(parent);
