@@ -21,26 +21,65 @@ public static class WindowsClipboard
     public static void SetFiles(IReadOnlyList<string> paths, bool cut)
     {
         // DROPFILES header (20 bytes) followed by a double-null-terminated list of UTF-16 paths.
+        if (paths.Count == 0 || paths.Any(p => string.IsNullOrEmpty(p) || p.Contains('\0')))
+            throw new ArgumentException("Nothing to put on the clipboard.", nameof(paths));
+
         var list = Encoding.Unicode.GetBytes(string.Join('\0', paths) + "\0\0");
-        var drop = GlobalAlloc(GMEM_MOVEABLE, 20 + list.Length);
-        var p = GlobalLock(drop);
-        Marshal.WriteInt32(p, 0, 20);  // pFiles: offset of the list
-        Marshal.WriteInt64(p, 4, 0);   // pt
-        Marshal.WriteInt32(p, 12, 0);  // fNC
-        Marshal.WriteInt32(p, 16, 1);  // fWide
-        Marshal.Copy(list, 0, p + 20, list.Length);
-        GlobalUnlock(drop);
+        var header = new byte[20];
+        BitConverter.TryWriteBytes(header.AsSpan(0), 20);  // pFiles: offset of the list; pt and fNC stay zero
+        BitConverter.TryWriteBytes(header.AsSpan(16), 1);  // fWide
+        var effect = BitConverter.GetBytes(cut ? DROPEFFECT_MOVE : DROPEFFECT_COPY | DROPEFFECT_LINK);
 
-        var effect = GlobalAlloc(GMEM_MOVEABLE, 4);
-        Marshal.WriteInt32(GlobalLock(effect), cut ? DROPEFFECT_MOVE : DROPEFFECT_COPY | DROPEFFECT_LINK);
-        GlobalUnlock(effect);
+        Put((CF_HDROP, [.. header, .. list]), (CF_PREFERREDDROPEFFECT, effect));
+    }
 
-        WithClipboard(() =>
+    /// <summary>
+    /// Replaces the clipboard contents. The clipboard takes ownership of each block it accepts;
+    /// blocks it doesn't take (allocation, open, or set failed) are freed here instead of leaking.
+    /// </summary>
+    static void Put(params (uint Format, byte[] Data)[] entries)
+    {
+        var handles = new nint[entries.Length];
+        try
         {
-            EmptyClipboard();
-            SetClipboardData(CF_HDROP, drop);
-            SetClipboardData(CF_PREFERREDDROPEFFECT, effect);
-        });
+            for (var i = 0; i < entries.Length; i++)
+                handles[i] = Allocate(entries[i].Data);
+
+            WithClipboard(() =>
+            {
+                if (!EmptyClipboard())
+                    throw new IOException("Couldn't clear the clipboard. Try again.");
+                for (var i = 0; i < entries.Length; i++)
+                {
+                    if (SetClipboardData(entries[i].Format, handles[i]) == 0)
+                        throw new IOException("Couldn't put that on the clipboard. Try again.");
+                    handles[i] = 0; // now owned by the clipboard
+                }
+            });
+        }
+        finally
+        {
+            foreach (var handle in handles)
+            {
+                if (handle != 0) GlobalFree(handle);
+            }
+        }
+    }
+
+    static nint Allocate(byte[] data)
+    {
+        var handle = GlobalAlloc(GMEM_MOVEABLE, data.Length);
+        if (handle == 0)
+            throw new IOException("Not enough memory to use the clipboard.");
+        var p = GlobalLock(handle);
+        if (p == 0)
+        {
+            GlobalFree(handle);
+            throw new IOException("Not enough memory to use the clipboard.");
+        }
+        Marshal.Copy(data, 0, p, data.Length);
+        GlobalUnlock(handle);
+        return handle;
     }
 
     /// <summary>Files on the clipboard and whether they were cut, or null when there are none.</summary>
@@ -58,12 +97,14 @@ public static class WindowsClipboard
             {
                 var buffer = new StringBuilder((int)DragQueryFile(drop, i, null, 0) + 1);
                 DragQueryFile(drop, i, buffer, (uint)buffer.Capacity);
-                paths.Add(buffer.ToString());
+                // Any app can put a file list here. Only complete paths are safe to act on.
+                if (ShellOperations.IsCompletePath(buffer.ToString()))
+                    paths.Add(buffer.ToString());
             }
 
             var cut = false;
             var effect = GetClipboardData(CF_PREFERREDDROPEFFECT);
-            if (effect != 0 && GlobalLock(effect) is var pe && pe != 0)
+            if (effect != 0 && GlobalSize(effect) >= sizeof(int) && GlobalLock(effect) is var pe && pe != 0)
             {
                 var value = Marshal.ReadInt32(pe);
                 GlobalUnlock(effect);
@@ -76,15 +117,8 @@ public static class WindowsClipboard
 
     public static void SetText(string text)
     {
-        var bytes = Encoding.Unicode.GetBytes(text + "\0");
-        var h = GlobalAlloc(GMEM_MOVEABLE, bytes.Length);
-        Marshal.Copy(bytes, 0, GlobalLock(h), bytes.Length);
-        GlobalUnlock(h);
-        WithClipboard(() =>
-        {
-            EmptyClipboard();
-            SetClipboardData(CF_UNICODETEXT, h);
-        });
+        // A null would cut the text short for whoever pastes it.
+        Put((CF_UNICODETEXT, Encoding.Unicode.GetBytes(text.Replace("\0", "") + "\0")));
     }
 
     public static void Clear() => WithClipboard(() => EmptyClipboard());
@@ -125,6 +159,8 @@ public static class WindowsClipboard
     [DllImport("kernel32.dll")] static extern nint GlobalAlloc(uint uFlags, nint dwBytes);
     [DllImport("kernel32.dll")] static extern nint GlobalLock(nint hMem);
     [DllImport("kernel32.dll")] static extern bool GlobalUnlock(nint hMem);
+    [DllImport("kernel32.dll")] static extern nint GlobalFree(nint hMem);
+    [DllImport("kernel32.dll")] static extern nuint GlobalSize(nint hMem);
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern uint DragQueryFile(nint hDrop, uint iFile, StringBuilder? lpszFile, uint cch);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]

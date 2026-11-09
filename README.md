@@ -15,6 +15,7 @@ A dual pane file manager for Windows, built with C# and [Avalonia UI](https://av
 - Remembers your tabs, their sort order, the active pane, the preview panel, and the window size, position, and panel widths between sessions (saved in `%APPDATA%\Dockett\session.json`). Folders that no longer exist reopen at the nearest parent that does
 - Settings page (gear in the title bar, or Ctrl+,): theme, show hidden and system files, folders before files, confirmations for copy/move and delete, and restoring tabs on startup. Saved in `%APPDATA%\Dockett\settings.json`
 - Light and dark themes follow Windows, or pick one in Settings
+- If Dockett ever closes unexpectedly, the details are written to `crash.log` next to the settings files
 
 ## Portable build
 

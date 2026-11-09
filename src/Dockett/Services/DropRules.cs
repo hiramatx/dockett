@@ -18,6 +18,9 @@ public static class DropRules
     {
         if (sources.Count == 0 || string.IsNullOrEmpty(targetFolder))
             return DropAction.None;
+        // Other apps can offer anything in a drag. Only act on complete paths.
+        if (!ShellOperations.IsCompletePath(targetFolder) || !sources.All(ShellOperations.IsCompletePath))
+            return DropAction.None;
 
         var target = Normalize(targetFolder);
         foreach (var source in sources)

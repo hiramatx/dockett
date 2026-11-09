@@ -11,6 +11,9 @@ public partial class PreviewViewModel : ViewModelBase
     const int MaxTextBytes = 32 * 1024;
     const int MaxTextLines = 200;
 
+    // Decoding happens just from moving the selection, so don't take on files big enough to exhaust memory.
+    const long MaxImageBytes = 64 * 1024 * 1024;
+
     CancellationTokenSource? _cts;
 
     [ObservableProperty]
@@ -137,6 +140,8 @@ public partial class PreviewViewModel : ViewModelBase
         try
         {
             using var stream = File.OpenRead(path);
+            if (stream.Length > MaxImageBytes)
+                return (null, null);
             var full = new Bitmap(stream);
             var size = $"{full.PixelSize.Width}×{full.PixelSize.Height}";
             if (full.PixelSize.Width <= 600)

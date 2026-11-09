@@ -418,9 +418,10 @@ public partial class FilePaneView : UserControl
         {
             ShellContextMenu.Show(owner, paths, screen.X, screen.Y, extended);
         }
-        catch (Exception e) when (e is System.Runtime.InteropServices.COMException or ArgumentException or UnauthorizedAccessException)
+        catch (Exception e) when (e is not OutOfMemoryException)
         {
-            // The shell couldn't build a menu for these items; nothing useful to show.
+            // The shell (or one of its third-party extensions) couldn't build or run a menu for these items;
+            // failures surface as many exception types, and none of them should take the app down.
             System.Diagnostics.Debug.WriteLine(e);
         }
         FocusList();

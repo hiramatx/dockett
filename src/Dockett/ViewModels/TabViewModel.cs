@@ -211,11 +211,12 @@ public partial class TabViewModel : ViewModelBase, IDisposable
 
     async Task<bool> LoadAsync(string path, string? selectName, bool addToHistory)
     {
-        path = NormalizePath(path);
         var version = ++_loadVersion;
         IsLoading = true;
         try
         {
+            // Inside the try: whatever is typed in the address bar must end in a message, not a crash.
+            path = NormalizePath(path, CurrentPath);
             var showHidden = _settings.ShowHidden;
             var items = await Task.Run(() => FileSystemService.List(path, showHidden));
             if (version != _loadVersion) return false; // a newer navigation won
@@ -248,7 +249,8 @@ public partial class TabViewModel : ViewModelBase, IDisposable
             ApplyView(selectName);
             return true;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or System.Security.SecurityException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException
+                                      or NotSupportedException or System.Security.SecurityException)
         {
             if (version == _loadVersion)
                 ErrorText = e is UnauthorizedAccessException
@@ -263,12 +265,18 @@ public partial class TabViewModel : ViewModelBase, IDisposable
         }
     }
 
-    static string NormalizePath(string path)
+    /// <summary>
+    /// Cleans up a typed or saved path. Relative paths are taken from <paramref name="currentFolder"/>
+    /// rather than from wherever the process happened to start.
+    /// </summary>
+    static string NormalizePath(string path, string currentFolder)
     {
-        path = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"'));
+        path = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"').Trim());
+        if (path.Length == 0 || path.Contains('\0'))
+            throw new ArgumentException("That isn't a folder path.");
         if (path.Length == 2 && path[1] == ':')
             path += "\\";
-        return Path.GetFullPath(path);
+        return Path.IsPathFullyQualified(currentFolder) ? Path.GetFullPath(path, currentFolder) : Path.GetFullPath(path);
     }
 
     void ApplyView(string? selectName)
