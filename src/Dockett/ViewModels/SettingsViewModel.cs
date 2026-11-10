@@ -48,7 +48,7 @@ public partial class SettingsViewModel : ViewModelBase
     public bool IsDarkTheme { get => Theme == ThemeChoice.Dark; set { if (value) Theme = ThemeChoice.Dark; } }
 
     public string Version { get; } =
-        Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.1.0";
+        Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.1.1";
 
     public string DataLocation { get; } = Services.JsonFile.IsPortable
         ? "Portable mode: settings are kept in the Data folder next to Dockett.exe."
